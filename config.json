@@ -1,0 +1,46 @@
+{
+  "coverBottomMm": 75,
+  "coverTopMm": 50,
+  "coverEdgeMm": 75,
+
+  "direction": {
+    "mode": "long",
+    "angleDeg": 0
+  },
+
+  "bottom": {
+    "main": {
+      "barTypeName": "",
+      "spacingMm": 200,
+      "hookTypeName": ""
+    },
+    "secondary": {
+      "enabled": true,
+      "barTypeName": "",
+      "spacingMm": 200,
+      "hookTypeName": ""
+    }
+  },
+
+  "top": {
+    "enabled": false,
+    "main": {
+      "barTypeName": "",
+      "spacingMm": 200,
+      "hookTypeName": ""
+    },
+    "secondary": {
+      "enabled": true,
+      "barTypeName": "",
+      "spacingMm": 200,
+      "hookTypeName": ""
+    }
+  },
+
+  "detectColumns": true,
+
+  "partitionTemplate": "ZAP-{marca}",
+
+  "toleranceMm": 2,
+  "minBarLengthMm": 300
+}

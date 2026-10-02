@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>ARBA Zapatas</Name>
+    <Assembly>FootingRebar\FootingRebar.dll</Assembly>
+    <FullClassName>FootingRebar.RibbonApp</FullClassName>
+    <ClientId>7d4b2f91-3c6a-4e58-9b1d-2a8f6c0e5d73</ClientId>
+    <VendorId>LOCAL</VendorId>
+    <VendorDescription>Uso interno</VendorDescription>
+  </AddIn>
+  <AddIn Type="Command">
+    <Name>Armar zapata</Name>
+    <Text>Armar zapata</Text>
+    <Description>Genera el armado de zapatas (parrilla inferior en las dos direcciones con ganchos y, opcional, parrilla superior) a partir de la geometria del elemento, con una ventana para elegir el armado y los aceros.</Description>
+    <Assembly>FootingRebar\FootingRebar.dll</Assembly>
+    <FullClassName>FootingRebar.ArmarZapataCommand</FullClassName>
+    <ClientId>a2c8e6f4-1b9d-4d37-8e5a-6f0c3b7d9e21</ClientId>
+    <VendorId>LOCAL</VendorId>
+    <VendorDescription>Uso interno</VendorDescription>
+    <VisibilityMode>NotVisibleInFamily</VisibilityMode>
+  </AddIn>
+</RevitAddIns>

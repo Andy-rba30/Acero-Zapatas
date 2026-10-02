@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Programa de consola que prueba las clases puras (sin Revit): Geometry2D, FootingPlan, AppConfig, PartitionName.
+       dotnet run -c Debug (desde esta carpeta). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>FootingRebar.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Geometry2D.cs" Link="Geometry2D.cs" />
+    <Compile Include="..\FootingPlan.cs" Link="FootingPlan.cs" />
+    <Compile Include="..\AppConfig.cs" Link="AppConfig.cs" />
+    <Compile Include="..\PartitionName.cs" Link="PartitionName.cs" />
+  </ItemGroup>
+
+</Project>
