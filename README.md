@@ -20,6 +20,12 @@ sólido, ventana previa con esquemas y tema oscuro de Revit, red de seguridad qu
 elemento entero si una barra queda fuera del hormigón, `config.json`) y el mismo botón en la
 pestaña **ARBA** > panel **Acero** > desplegable **Acero** > **Zapatas**.
 
+Desde la versión 1.0.0 del **contrato ARBA** el add-in comparte con los demás el código común
+[ARBA-comun](https://github.com/Andy-rba30/ARBA-comun) (submódulo `external/ARBA-comun`): la misma
+cinta, el mismo tema oscuro, la **partición** `CIMIENTOS - ZAP-<marca>`, los parámetros compartidos
+`ARBA - Origen` / `ARBA - Código` / `Metrado - Elemento`, y con ellos **borrar y rearmar** sin duplicar y la
+**migración** de modelos armados con la versión anterior (ver [Contrato ARBA](#contrato-arba-partición-origen-borrar-y-rearmar-migración)).
+
 Antes de crear nada abre una **ventana** en la que se ve qué se ha detectado en cada zapata
 seleccionada y se elige el armado: dirección de las barras principales (general y por zapata),
 tipos de barra, separaciones, ganchos y recubrimientos, con un esquema en **planta** y de la
@@ -95,7 +101,10 @@ qué se ha rechazado lo que no.
 - **Parrilla superior**: activar, principal y secundaria.
 - **Recubrimientos, columnas y partición**: recubrimiento inferior (contra el terreno, 75 mm
   por defecto), superior (50) y lateral (75); mostrar las columnas; plantilla del parámetro
-  Partición (`{marca}`, `{id}`, `{tipo}`, `{familia}`, `{conjunto}`, `{capa}`).
+  Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` o `{capa}`, `{tipo}`,
+  `{familia}`, `{conjunto}`), con el ejemplo de la zapata seleccionada y, en rojo, el aviso si la
+  plantilla no empieza por `{categoria} - {prefijo}-` (incumple el contrato ARBA). En el pie se ve
+  la versión del contrato con la que se compiló el add-in.
 - **Planta**: hormigón de la cara inferior con huecos, cara superior a trazos si es menor,
   columnas (gris), cada barra a su grosor y con el color de su capa (rojo oscuro inferior
   principal, morado inferior secundaria, naranja superior principal, azul superior secundaria)
@@ -142,13 +151,44 @@ botón Armar avisa de qué falta.
     "secondary": { "enabled": true, "barTypeName": "", "spacingMm": 200, "hookTypeName": "" }
   },
   "detectColumns": true,
-  "partitionTemplate": "ZAP-{marca}",
+  "partitionTemplate": "{categoria} - {prefijo}-{marca}",   // contrato ARBA: "CIMIENTOS - ZAP-Z1"
   "toleranceMm": 2, "minBarLengthMm": 300
 }
 ```
 
 Los nombres de tipo de barra y de gancho pueden ser exactos o un fragmento (`"1/2"`,
-`"90"`); sin coincidencia no se arma, nunca se sustituye por otro tipo.
+`"90"`); sin coincidencia no se arma, nunca se sustituye por otro tipo. Si un fragmento coincide
+con varios tipos del proyecto se toma el primero y la ventana marca el desplegable en amarillo
+para que lo confirmes.
+
+## Contrato ARBA: partición, origen, borrar y rearmar, migración
+
+El add-in cumple el [contrato ARBA 1.0.0](https://github.com/Andy-rba30/ARBA-comun/blob/main/CONTRATO.md)
+compartido por todos los add-ins de armado y el plugin de metrados. El código común está en el
+submódulo `external/ARBA-comun` y se compila **dentro** de `FootingRebar.dll` (nunca como DLL aparte).
+
+- **Partición** de cada conjunto: `<CATEGORIA> - <PREFIJO>-{marca}`. La categoría la da el anfitrión
+  (una cimentación estructural es `CIMIENTOS`), el prefijo de este add-in es `ZAP` y la marca es el
+  parámetro Marca de la zapata (si está vacía, su Id): `CIMIENTOS - ZAP-Z1`, `CIMIENTOS - ZAP-1234`.
+  La capa **no** entra en la partición por defecto (una partición por zapata, como antes): queda en
+  `ARBA - Código`. Si la quieres en la partición, usa `{categoria} - {prefijo}-{marca}-{capa}`.
+  La partición se escribe en el parámetro predefinido, así que también funciona en Revit en español.
+- **Parámetros compartidos** (de ejemplar, grupo Datos, GUID fijos del contrato): al pulsar Armar el
+  add-in crea o completa en el proyecto `ARBA - Origen`, `ARBA - Código` y `Metrado - Elemento`, sin
+  tocar tu archivo de parámetros compartidos (usa uno temporal que borra al terminar). En cada
+  conjunto escribe `ARBA - Origen = ZAPATAS`, `ARBA - Código = inferior | inferior-sec | superior |
+  superior-sec` y `Metrado - Elemento = CIMIENTOS` (lo que agrupa el plugin de metrados).
+- **Borrar y rearmar**: si alguna zapata seleccionada ya tiene conjuntos con `ARBA - Origen = ZAPATAS`,
+  antes de armar se pregunta una vez: *Borrar la armadura del add-in y rearmar* (se borran solo esos
+  conjuntos y se vuelve a armar: el número de conjuntos no se duplica) o *Conservar y armar encima*.
+  Las barras colocadas a mano o por otros add-ins no se tocan nunca.
+- **Migración** de modelos armados con la versión anterior (partición `ZAP-Z1`, sin origen): el
+  add-in no las reconoce como propias hasta migrarlas, así que ofrece una tercera opción, *Migrar la
+  armadura antigua al contrato (sin rearmar)*: la partición pasa a `CIMIENTOS - ZAP-Z1` y se rellenan
+  `ARBA - Origen`, `ARBA - Código` (si la partición lo llevaba) y `Metrado - Elemento`, sin crear ni
+  borrar barras (Ctrl+Z lo deshace). Un segundo "armar" ya las reconoce y ofrece borrar y rearmar.
+  El plugin de metrados trae además el botón **Migrar particiones y origen** para todo el modelo.
+- El informe final y el pie de la ventana muestran la versión del contrato (`Contrato ARBA 1.0.0`).
 
 ## Compilar e instalar
 
@@ -156,9 +196,20 @@ Requiere el SDK de .NET 10 y Revit 2027.2 (los paquetes `Nice3point.Revit.Api.*`
 traen las DLL de la API; para Revit 2025/2026 cambia el `TargetFramework` a
 `net8.0-windows` y la versión del paquete).
 
+El código común ARBA viene como **submódulo git**: clona con `--recurse-submodules` o, si ya tienes
+el repo, inicialízalo antes de compilar (sin él faltan las clases `Arba.Comun.*` y la compilación
+falla):
+
 ```
+git clone --recurse-submodules https://github.com/Andy-rba30/Acero-Zapatas
+# o, en un clon existente:
+git submodule update --init
 dotnet build -c Debug
 ```
+
+Para subir de versión del contrato: `git -C external/ARBA-comun checkout vX.Y.Z` y commit del
+puntero del submódulo. Nunca se edita nada dentro de `external/ARBA-comun` desde este repo (lo que
+falte va a `NOTAS-ARBA-COMUN.md`).
 
 En Debug la compilación copia `FootingRebar.dll`, `config.json` y `FootingRebar.addin` a
 `%AppData%\Autodesk\Revit\Addins\2027\`. Al abrir Revit aparece la pestaña **ARBA** con el
@@ -184,12 +235,14 @@ cd Tests && dotnet run
 | `HostAnalysis.cs` | Resultado por elemento (contorno o motivo de rechazo) y dirección propia. |
 | `RebarGenerator.cs` | Crea los `Rebar` con las dos redes de seguridad y la orientación automática de ganchos. |
 | `RebarOptionsWindow.cs`, `PlanPreview.cs`, `SectionPreview.cs` | Ventana y esquemas (WPF en código, sin XAML). |
-| `RevitTheme.cs` | Tema oscuro al estilo de Revit 2027 (el mismo que en columnas y losas). |
-| `ArmarZapataCommand.cs`, `RibbonApp.cs` | Comando externo y pestaña de la cinta. |
-| `AppConfig.cs`, `PartitionName.cs` | Configuración y plantilla de Partición. |
+| `ArmarZapataCommand.cs`, `RibbonApp.cs` | Comando externo (parámetros del contrato, borrar y rearmar, migración) y botón en la cinta ARBA. |
+| `AppConfig.cs` | Configuración (`config.json`), con la plantilla de Partición del contrato. |
+| `external/ARBA-comun/` | Submódulo con el código común ARBA (contrato, `ArbaPartition`, `PartitionName`, `ArbaOrigin`, `ArbaSharedParams`, `ArbaMigration`, `ArbaRibbon`, `RevitTheme`, `NameMatch`); se compila dentro de la DLL vía `Arba.Comun.props`. |
+| `NOTAS-ARBA-COMUN.md` | Lo que le falta o convendría cambiar al código común (no se edita desde aquí). |
 | `Tests/` | Pruebas de consola de las clases puras. |
 | `PLAN.md` | Plan de trabajo y estado del proyecto. |
 | `INSTALADOR.md` | Instrucciones para añadir el plugin al instalador de ARBA. |
 
-Las clases puras (`Geometry2D`, `FootingPlan`, `AppConfig`, `PartitionName`) no dependen de
-Revit y se prueban en el programa de consola.
+Las clases puras (`Geometry2D`, `FootingPlan`, `AppConfig` y, del común, `ArbaContract`,
+`ArbaPartition`, `PartitionName`, `NameMatch`) no dependen de Revit y se prueban en el programa de
+consola.

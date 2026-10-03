@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Arba.Comun;
 
 namespace FootingRebar.Tests
 {
@@ -288,12 +289,52 @@ namespace FootingRebar.Tests
             Check(c.CoverTopMm != 99, "Clone es independiente");
             System.IO.File.Delete(tmp);
 
-            string s = PartitionName.Expand("ZAP-{marca}-{capa}", new PartitionName.Source { Mark = "Z-01", Layer = "inferior" });
-            Check(s == "ZAP-Z-01-inferior", "particion con marca y capa: " + s);
+            string s = PartitionName.Expand("ZAP-{marca}-{capa}", new PartitionName.Source { Mark = "Z-01", Code = "inferior" });
+            Check(s == "ZAP-Z-01-inferior", "particion con marca y capa ({capa} es alias de {codigo}): " + s);
             s = PartitionName.Expand("ZAP-{marca}", new PartitionName.Source { Mark = "", Id = "1234" });
             Check(s == "ZAP-1234", "particion sin marca usa el id: " + s);
             s = PartitionName.Expand("ZAP-{conjunto}", new PartitionName.Source());
             Check(s == "ZAP", "comodin vacio sin separador huerfano: " + s);
+
+            // contrato ARBA: "{categoria} - {prefijo}-{marca}" por defecto, sin codigo de capa
+            var def = new AppConfig();
+            def.Normalize();
+            Check(ArbaPartition.TemplateFollowsContract(def.PartitionTemplate), "la plantilla por defecto cumple el contrato ARBA: " + def.PartitionTemplate);
+            Check(def.PartitionTemplate == AppConfig.DefaultPartitionTemplate, "la plantilla por defecto es la del add-in");
+            def.PartitionTemplate = "   ";
+            def.Normalize();
+            Check(def.PartitionTemplate == AppConfig.DefaultPartitionTemplate, "plantilla vacia -> la del contrato (" + def.PartitionTemplate + ")");
+            Check(!ArbaPartition.TemplateFollowsContract("ZAP-{marca}"), "la plantilla antigua ZAP-{marca} incumple el contrato");
+            Check(ArbaContract.Zapatas.Prefix == "ZAP" && ArbaContract.Zapatas.Origin == "ZAPATAS", "prefijo ZAP, origen ZAPATAS");
+
+            s = ArbaPartition.Build("CIMIENTOS", "ZAP", "Z-01", "1");
+            Check(s == "CIMIENTOS - ZAP-Z-01", "particion del contrato con marca: " + s);
+            s = ArbaPartition.Build("CIMIENTOS", "ZAP", "", "1234");
+            Check(s == "CIMIENTOS - ZAP-1234", "particion del contrato sin marca usa el id: " + s);
+            s = ArbaPartition.Build(AppConfig.DefaultPartitionTemplate, new PartitionName.Source
+            {
+                Category = "CIMIENTOS", Prefix = "ZAP", Mark = "Z1", Id = "77", SetName = "inferior principal", Code = "inferior"
+            });
+            Check(s == "CIMIENTOS - ZAP-Z1", "plantilla del add-in: la capa no entra en la particion: " + s);
+            s = ArbaPartition.Build("{categoria} - {prefijo}-{marca}-{capa}", new PartitionName.Source
+            {
+                Category = "CIMIENTOS", Prefix = "ZAP", Mark = "Z1", Code = "superior-sec"
+            });
+            Check(s == "CIMIENTOS - ZAP-Z1-superior-sec", "plantilla con {capa}: " + s);
+
+            ArbaPartitionInfo info = ArbaPartition.Parse("CIMIENTOS - ZAP-Z1");
+            Check(info.Kind == ArbaPartitionKind.Contract && info.Category == "CIMIENTOS" && info.Prefix == "ZAP" && info.Mark == "Z1" && info.Code == "",
+                  "Parse de la particion nueva: " + info);
+            info = ArbaPartition.Parse("CIMIENTOS - ZAP-Z1-inferior-sec");
+            Check(info.Mark == "Z1" && info.Code == "inferior-sec", "Parse separa la capa conocida de la marca: " + info);
+            info = ArbaPartition.Parse("ZAP-Z1");
+            Check(info.Kind == ArbaPartitionKind.Legacy && info.Prefix == "ZAP" && info.Mark == "Z1", "la particion antigua ZAP-Z1 se reconoce como legacy: " + info);
+            Check(ArbaPartition.Upgrade(info, "CIMIENTOS") == "CIMIENTOS - ZAP-Z1", "migracion ZAP-Z1 -> CIMIENTOS - ZAP-Z1");
+
+            Check(NameMatch.First(new[] { "#3", "#4", "1/2\"" }, "1/2") == "1/2\"", "NameMatch.First: fragmento");
+            Check(NameMatch.First(new[] { "#3", "#4" }, "#4") == "#4" && NameMatch.First(new[] { "#3" }, "#9") == null, "NameMatch.First: exacto y sin coincidencia");
+            Check(NameMatch.IsAmbiguous(new[] { "Gancho 90", "Gancho 90 sismico", "Gancho 135" }, "90") && NameMatch.Unique(new[] { "Gancho 90", "Gancho 135" }, "90") == "Gancho 90",
+                  "NameMatch: ambiguo con dos coincidencias, unico con una");
         }
     }
 }

@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Arba.Comun;
 
 namespace FootingRebar
 {
@@ -66,11 +67,18 @@ namespace FootingRebar
         public bool DetectColumns { get; set; } = true;
 
         /// <summary>
-        /// Plantilla del parametro Particion de cada barra. Comodines: {marca} (Marca del
-        /// elemento; si esta vacia se usa el Id), {id}, {tipo}, {familia}, {conjunto}
-        /// (nombre del juego de barras) y {capa} (inferior, inferior-sec, superior, superior-sec).
+        /// Plantilla por defecto del contrato ARBA para este add-in: categoria del anfitrion (CIMIENTOS), prefijo
+        /// ZAP y marca, sin codigo de capa ("CIMIENTOS - ZAP-Z1"); el detalle de la capa va en "ARBA - Codigo".
+        /// Una plantilla que no empiece por "{categoria} - {prefijo}-" incumple el contrato (la ventana lo avisa).
         /// </summary>
-        public string PartitionTemplate { get; set; } = "ZAP-{marca}";
+        public const string DefaultPartitionTemplate = "{categoria} - {prefijo}-{marca}";
+
+        /// <summary>
+        /// Plantilla del parametro Particion de cada barra. Comodines (ver <see cref="PartitionName.Help"/> del
+        /// codigo comun ARBA): {categoria}, {prefijo}, {marca} (Marca del anfitrion; si esta vacia se usa el Id),
+        /// {id}, {codigo} o {capa} (inferior, inferior-sec, superior, superior-sec), {tipo}, {familia} y {conjunto}.
+        /// </summary>
+        public string PartitionTemplate { get; set; } = DefaultPartitionTemplate;
 
         /// <summary>Tolerancia geometrica al agrupar coordenadas y comparar (mm).</summary>
         public double ToleranceMm { get; set; } = 2;
@@ -106,7 +114,7 @@ namespace FootingRebar
             if (CoverEdgeMm < 0) CoverEdgeMm = 0;
             if (ToleranceMm <= 0) ToleranceMm = 2;
             if (MinBarLengthMm < 0) MinBarLengthMm = 0;
-            if (string.IsNullOrWhiteSpace(PartitionTemplate)) PartitionTemplate = "ZAP-{marca}";
+            if (string.IsNullOrWhiteSpace(PartitionTemplate)) PartitionTemplate = DefaultPartitionTemplate;
         }
 
         /// <summary>"long", "short", "x", "y" o "angle"; cualquier otra cosa es "long".</summary>

@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Arba.Comun;
 
 namespace FootingRebar
 {
@@ -46,7 +47,9 @@ namespace FootingRebar
         // general
         private TextBox _coverB, _coverT, _coverE, _partition;
         private CheckBox _columns;
-        private TextBlock _message, _partitionPreview, _previewCaption;
+        private TextBlock _message, _partitionPreview, _partitionWarning, _previewCaption;
+        /// <summary>Desplegables cuyo nombre configurado (fragmento) coincidia con varios tipos: se tomo el primero y se avisa en amarillo.</summary>
+        private readonly HashSet<ComboBox> _ambiguous = new HashSet<ComboBox>();
         private Button _buildButton;
         private PlanPreview _plan;
         private SectionPreview _section;
@@ -63,6 +66,14 @@ namespace FootingRebar
         private static readonly string[] DirLabels = { "lado largo (lo normal)", "lado corto", "X del proyecto", "Y del proyecto", "angulo (grados)" };
         private static readonly Thickness Pad = new Thickness(4, 2, 4, 2);
         private static readonly Brush SelectedBrush = RevitTheme.Selection;
+        private static readonly Brush AmbiguousBrush = Frozen(Color.FromRgb(0xE0, 0xC0, 0x4A));   // amarillo: fragmento ambiguo
+
+        private static Brush Frozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
 
         public RebarOptionsWindow(AppConfig cfg, IList<string> barTypes, IDictionary<string, double> diametersMm, IDictionary<string, double> hookBendMm,
                                   IList<string> hookTypes, IDictionary<string, double> hookAngles, IList<HostAnalysis> items)
@@ -325,6 +336,14 @@ namespace FootingRebar
             AddRow(grid, r++, "Particion:", _partition, "Plantilla del parametro Particion de cada barra. Comodines: " + PartitionName.Help);
             _partitionPreview = new TextBlock { Foreground = RevitTheme.Muted, Margin = Pad, TextWrapping = TextWrapping.Wrap };
             AddRow(grid, r++, "", _partitionPreview, null);
+            _partitionWarning = new TextBlock
+            {
+                Foreground = RevitTheme.Error, Margin = Pad, TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
+                ToolTip = "El contrato ARBA (" + ArbaContract.Version + ") exige que la particion empiece por la categoria del anfitrion y el prefijo " +
+                          "del add-in: \"{categoria} - {prefijo}-...\" (p. ej. \"" + AppConfig.DefaultPartitionTemplate + "\" da \"CIMIENTOS - ZAP-Z1\"). " +
+                          "Asi el plugin de metrados agrupa el acero por categoria y cada add-in reconoce lo suyo."
+            };
+            AddRow(grid, r++, "", _partitionWarning, null);
             group.Content = grid;
             return group;
         }
@@ -396,7 +415,17 @@ namespace FootingRebar
             var cancel = new Button { Content = "Cancelar", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(4, 0, 0, 0), IsCancel = true };
             buttons.Children.Add(cancel);
 
+            var version = new TextBlock
+            {
+                Text = "Contrato ARBA " + ArbaContract.Version, Foreground = RevitTheme.Muted, VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 12, 0),
+                ToolTip = "Version del contrato ARBA-comun con la que se compilo el add-in: particion \"CATEGORIA - PREFIJO-marca\", " +
+                          "parametros compartidos ARBA - Origen (ZAPATAS), ARBA - Codigo (capa) y Metrado - Elemento (CIMIENTOS)."
+            };
+            DockPanel.SetDock(version, Dock.Left);
+
             panel.Children.Add(buttons);
+            panel.Children.Add(version);
             panel.Children.Add(_message);
             return panel;
         }
@@ -446,9 +475,30 @@ namespace FootingRebar
         {
             var cb = new ComboBox { Margin = Pad };
             foreach (string n in _barTypes) cb.Items.Add(TypeDisplay(n));
-            string match = RebarGenerator.MatchName(_barTypes, current);
+            string match = NameMatch.First(_barTypes, current);
             cb.SelectedIndex = match == null ? -1 : _barTypes.IndexOf(match);
+            if (NameMatch.IsAmbiguous(_barTypes, current)) MarkAmbiguous(cb, "tipo de barra", current, NameMatch.Candidates(_barTypes, current));
             return cb;
+        }
+
+        /// <summary>
+        /// El nombre de config.json es un fragmento que coincide con varios tipos: se ha tomado el primero (regla
+        /// antigua, NameMatch.First) y se marca el desplegable en amarillo hasta que el usuario elija uno.
+        /// </summary>
+        private void MarkAmbiguous(ComboBox cb, string what, string fragment, List<string> candidates)
+        {
+            _ambiguous.Add(cb);
+            cb.ToolTip = "El " + what + " \"" + fragment + "\" de la configuracion coincide con varios tipos del proyecto (" +
+                         string.Join(", ", candidates) + "). Se ha tomado el primero: comprueba que es el que quieres o elige otro.";
+            cb.BorderBrush = AmbiguousBrush;
+            cb.BorderThickness = new Thickness(2);
+            cb.SelectionChanged += (s, e) =>
+            {
+                if (!_ambiguous.Remove(cb)) return;
+                cb.ClearValue(FrameworkElement.ToolTipProperty);
+                cb.ClearValue(Control.BorderBrushProperty);
+                cb.ClearValue(Control.BorderThicknessProperty);
+            };
         }
 
         private string TypeOf(ComboBox cb) =>
@@ -459,8 +509,9 @@ namespace FootingRebar
             var cb = new ComboBox { Margin = Pad };
             cb.Items.Add(NoHook);
             foreach (string n in _hookTypes) cb.Items.Add(HookDisplay(n));
-            string match = RebarGenerator.MatchName(_hookTypes, current);
+            string match = NameMatch.First(_hookTypes, current);
             cb.SelectedIndex = match == null ? 0 : _hookTypes.IndexOf(match) + 1;
+            if (NameMatch.IsAmbiguous(_hookTypes, current)) MarkAmbiguous(cb, "tipo de gancho", current, NameMatch.Candidates(_hookTypes, current));
             return cb;
         }
 
@@ -471,13 +522,13 @@ namespace FootingRebar
 
         private double DiameterFt(string typeName)
         {
-            string match = RebarGenerator.MatchName(_barTypes, typeName);
+            string match = NameMatch.First(_barTypes, typeName);
             return match != null && _diametersMm.TryGetValue(match, out double mm) ? FootingPlan.Mm(mm) : 0;
         }
 
         private double HookInsetFt(string typeName, double diameterFt)
         {
-            string match = RebarGenerator.MatchName(_barTypes, typeName);
+            string match = NameMatch.First(_barTypes, typeName);
             double bend = match != null && _hookBendMm.TryGetValue(match, out double mm) ? mm : 0;
             return FootingPlan.Mm(RebarGenerator.HookInsetMm(diameterFt * FootingPlan.MmPerFt, bend));
         }
@@ -578,6 +629,7 @@ namespace FootingRebar
             })
             {
                 if (_strictTypes && needed.Contains(layer) && cb.SelectedIndex < 0) { cb.BorderBrush = RevitTheme.Error; cb.BorderThickness = new Thickness(2); }
+                else if (_ambiguous.Contains(cb)) { cb.BorderBrush = AmbiguousBrush; cb.BorderThickness = new Thickness(2); }
                 else { cb.ClearValue(Control.BorderBrushProperty); cb.ClearValue(Control.BorderThicknessProperty); }
             }
         }
@@ -590,6 +642,11 @@ namespace FootingRebar
             if (_building) return;
             AppConfig scratch = ReadConfig(out string error);
             MarkTypes(scratch);
+
+            // contrato ARBA: la plantilla tiene que empezar por "{categoria} - {prefijo}-"
+            bool follows = ArbaPartition.TemplateFollowsContract(scratch.PartitionTemplate);
+            _partitionWarning.Text = follows ? "" : "La plantilla no empieza por {categoria} - {prefijo}-: incumple el contrato ARBA";
+            _partitionWarning.Visibility = follows ? Visibility.Collapsed : Visibility.Visible;
 
             // controles que dependen de otros
             _angle.IsEnabled = scratch.Direction.Mode == "angle";

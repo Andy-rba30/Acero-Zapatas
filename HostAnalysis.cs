@@ -1,4 +1,5 @@
 using System;
+using Arba.Comun;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 
@@ -33,12 +34,16 @@ namespace FootingRebar
 
         public string Detail => Error ?? Outline.Describe();
 
+        /// <summary>
+        /// Particion del contrato ARBA para un conjunto de esta zapata: la categoria (CIMIENTOS) y el Id los
+        /// deduce el comun del anfitrion, el prefijo es ZAP y la capa (inferior, inferior-sec, superior,
+        /// superior-sec) va en {codigo} / {capa}; con la plantilla por defecto queda "CIMIENTOS - ZAP-Z1".
+        /// </summary>
         public string Partition(AppConfig cfg, string setName, string layer)
         {
-            return PartitionName.Expand(cfg.PartitionTemplate, new PartitionName.Source
+            return ArbaPartition.BuildFor(Host, ArbaContract.Zapatas, cfg.PartitionTemplate, new PartitionName.Source
             {
-                Mark = Mark, Id = Host.Id.ToString(), TypeName = TypeName, FamilyName = FamilyName,
-                SetName = setName, Layer = layer
+                Mark = Mark, TypeName = TypeName, FamilyName = FamilyName, SetName = setName, Code = layer
             });
         }
 
