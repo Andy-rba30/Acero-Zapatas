@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Arba.Comun;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 
@@ -208,7 +209,7 @@ namespace FootingRebar
                 if (array) rb.GetShapeDrivenAccessor().SetLayoutAsFixedNumber(g.Count, (g.Count - 1) * g.Spacing, true, true, true);
                 else rb.GetShapeDrivenAccessor().SetLayoutAsSingle();
 
-                Finish(c.Doc, rb, c.Item.Partition(c.Cfg, SetName(b), Layers.Short(b.Layer)));
+                Finish(c.Doc, rb, c.Item.Host, c.Item.Partition(c.Cfg, SetName(b), Layers.Short(b.Layer)), b.Layer);
                 c.Result.Created.Add(new CreatedSet { Id = rb.Id, Name = name, Radius = r, AlongU = b.AlongU });
                 c.Result.Bars += g.Count;
                 c.Result.ByLayer[b.Layer] = (c.Result.ByLayer.TryGetValue(b.Layer, out int prev) ? prev : 0) + g.Count;
@@ -378,15 +379,17 @@ namespace FootingRebar
             }
         }
 
-        private static void Finish(Document doc, Rebar r, string partition)
+        /// <summary>
+        /// Marca un conjunto recien creado segun el contrato ARBA: Particion ("CIMIENTOS - ZAP-Z1", escrita en el
+        /// parametro predefinido con respaldo por nombre en espanol e ingles), "ARBA - Origen" = ZAPATAS,
+        /// "ARBA - Codigo" = capa (inferior, inferior-sec, superior, superior-sec) y "Metrado - Elemento" = la
+        /// categoria del anfitrion. Con el origen el add-in reconoce lo suyo al rearmar (borrar y rearmar).
+        /// Los parametros compartidos los asegura el comando antes de armar (ArbaSharedParams.Ensure).
+        /// </summary>
+        private static void Finish(Document doc, Rebar r, Element host, string partition, BarLayer layer)
         {
-            if (!string.IsNullOrEmpty(partition))
-            {
-                Parameter p = null;
-                try { p = r.get_Parameter(BuiltInParameter.NUMBER_PARTITION_PARAM); } catch { }
-                if (p == null) p = r.LookupParameter("Partition") ?? r.LookupParameter("Particion") ?? r.LookupParameter("Partición");
-                if (p != null && !p.IsReadOnly) { try { p.Set(partition); } catch { } }
-            }
+            ArbaPartition.Write(r, partition);
+            ArbaOrigin.WriteFor(r, host, ArbaContract.Zapatas, Layers.Short(layer));
             try { r.SetUnobscuredInView(doc.ActiveView, true); } catch { }
         }
 
@@ -395,7 +398,7 @@ namespace FootingRebar
             var all = AllBarTypes(doc);
             if (all.Count == 0)
                 throw new InvalidOperationException("El proyecto no tiene ningun tipo de barra (RebarBarType). Carga una familia de armadura primero.");
-            string match = MatchName(all.Select(b => b.Name), name);
+            string match = NameMatch.First(all.Select(b => b.Name), name);
             if (match == null)
                 throw new InvalidOperationException("el tipo de barra de " + use + " \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana");
             return all.First(b => b.Name == match);
@@ -406,24 +409,15 @@ namespace FootingRebar
         {
             if (string.IsNullOrWhiteSpace(name)) return ElementId.InvalidElementId;
             var all = AllHookTypes(doc);
-            string match = MatchName(all.Select(h => h.Name), name);
+            string match = NameMatch.First(all.Select(h => h.Name), name);
             if (match == null)
                 throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
             return all.First(h => h.Name == match).Id;
         }
 
-        /// <summary>
-        /// Nombre que corresponde a "name": coincidencia exacta, si no parcial (sin distinguir
-        /// mayusculas); null si no hay ninguna. Nunca se sustituye por otro: sin coincidencia no se arma.
-        /// </summary>
-        public static string MatchName(IEnumerable<string> names, string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return null;
-            var list = names.ToList();
-            string exact = list.FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
-            if (exact != null) return exact;
-            return list.FirstOrDefault(n => n.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0);
-        }
+        // La coincidencia de nombres de tipo (exacta, si no el primero que contiene el fragmento; nunca se sustituye
+        // por otro tipo) es ahora NameMatch.First del codigo comun ARBA; la ventana avisa con NameMatch.IsAmbiguous
+        // cuando un fragmento coincide con varios tipos.
 
         public static List<RebarBarType> AllBarTypes(Document doc) =>
             new FilteredElementCollector(doc).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()

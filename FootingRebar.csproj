@@ -16,6 +16,19 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
+  <!-- ARBA-comun (submodulo external/ARBA-comun, etiqueta v1.0.0): el codigo comun se compila DENTRO de este
+       ensamblado (clases internal, namespace Arba.Comun), nunca como DLL compartida. RevitVersion define REVIT2027. -->
+  <PropertyGroup>
+    <RevitVersion>2027</RevitVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- El SDK incluye por defecto todo *.cs bajo el proyecto; del submodulo solo entra src/ (lo anade el .props con Link),
+         no sus tests/ ni build/. Este Remove tiene que ir ANTES del Import. -->
+    <Compile Remove="external\**" />
+    <None Remove="external\**" />
+  </ItemGroup>
+  <Import Project="external/ARBA-comun/Arba.Comun.props" />
+
   <ItemGroup>
     <!-- Revit 2027.2: las DLL de la API vienen en los paquetes de Nice3point -->
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2027.2.*" ExcludeAssets="runtime" />

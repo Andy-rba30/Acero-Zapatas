@@ -39,7 +39,7 @@
 
   "detectColumns": true,
 
-  "partitionTemplate": "ZAP-{marca}",
+  "partitionTemplate": "{categoria} - {prefijo}-{marca}",
 
   "toleranceMm": 2,
   "minBarLengthMm": 300

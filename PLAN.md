@@ -25,10 +25,9 @@ deshace el elemento entero si una barra queda fuera del hormigon.
 | Archivo | Que hace | Estado |
 |---------|----------|--------|
 | `FootingRebar.csproj`, `FootingRebar.addin`, `config.json`, `.gitignore` | Proyecto .NET 10 (net10.0-windows), manifiesto, configuracion | hecho |
-| `RevitTheme.cs` | Tema oscuro de Revit (copiado del add-in de losas, namespace `FootingRebar`) | hecho |
-| `RibbonApp.cs` | Pestana ARBA compartida (`ArbaRibbon`) + boton **Zapatas** con icono propio | hecho |
-| `AppConfig.cs` | Configuracion (`config.json`): recubrimientos, direccion, parrillas inferior y superior, columnas, particion | hecho |
-| `PartitionName.cs` | Plantilla del parametro Particion (`{marca}`, `{id}`, `{tipo}`, `{familia}`, `{conjunto}`, `{capa}`) | hecho |
+| `external/ARBA-comun/` | Submodulo ARBA-comun v1.0.0 (contrato, `ArbaRibbon`, `RevitTheme`, `PartitionName`, `ArbaPartition`, `ArbaOrigin`, `ArbaSharedParams`, `ArbaMigration`, `NameMatch`), compilado dentro de la DLL via `Arba.Comun.props`; sustituye a `RevitTheme.cs` y `PartitionName.cs` propios | hecho |
+| `RibbonApp.cs` | Boton **Zapatas** con icono propio en la cinta ARBA comun (`ArbaRibbon.Ensure` + `AddAcero`) | hecho |
+| `AppConfig.cs` | Configuracion (`config.json`): recubrimientos, direccion, parrillas inferior y superior, columnas, particion del contrato `{categoria} - {prefijo}-{marca}` | hecho |
 | `Geometry2D.cs` | Geometria pura: `Pt`, poligonos con huecos, recorte de una recta contra el contorno (scan-line), borde mas largo | hecho |
 | `FootingPlan.cs` | Armado puro: capas de las parrillas, ganchos con retranqueo del doblez, agrupacion en arrays | hecho |
 | `FootingOutline.cs` | Lectura del solido de Revit: caras inferior y superior, contornos, columnas encima, perfil de la seccion, `FootingFrame` | hecho |
@@ -37,7 +36,7 @@ deshace el elemento entero si una barra queda fuera del hormigon.
 | `RebarOptionsWindow.cs` | Ventana WPF en codigo, mismo aspecto que losas | hecho |
 | `PlanPreview.cs` | Esquema en planta (zoom/arrastrar/doble clic) con cara superior y columnas | hecho |
 | `SectionPreview.cs` | Esquema de la seccion transversal con el perfil real, terreno, columna, barras y ganchos | hecho |
-| `ArmarZapataCommand.cs` | Comando externo: seleccion de cimentaciones, analisis, ventana, transaccion, informe | hecho |
+| `ArmarZapataCommand.cs` | Comando externo: seleccion de cimentaciones, analisis, ventana, parametros del contrato ARBA, borrar y rearmar / conservar / migrar, transaccion, informe | hecho |
 | `README.md`, `INSTALADOR.md` | Documentacion de uso e instalacion | hecho |
 | `Tests/` | Programa de consola que prueba las clases puras: `cd Tests && dotnet run` | hecho (93 comprobaciones) |
 

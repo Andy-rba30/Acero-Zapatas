@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Programa de consola que prueba las clases puras (sin Revit): Geometry2D, FootingPlan, AppConfig, PartitionName.
+  <!-- Programa de consola que prueba las clases puras (sin Revit): Geometry2D, FootingPlan, AppConfig y la particion del contrato ARBA (ArbaPartition, PartitionName).
        dotnet run -c Debug (desde esta carpeta). -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -14,7 +14,11 @@
     <Compile Include="..\Geometry2D.cs" Link="Geometry2D.cs" />
     <Compile Include="..\FootingPlan.cs" Link="FootingPlan.cs" />
     <Compile Include="..\AppConfig.cs" Link="AppConfig.cs" />
-    <Compile Include="..\PartitionName.cs" Link="PartitionName.cs" />
+    <!-- clases puras del codigo comun ARBA (submodulo external/ARBA-comun): contrato, particion y nombres de tipo -->
+    <Compile Include="..\external\ARBA-comun\src\ArbaContract.cs" Link="Arba.Comun\ArbaContract.cs" />
+    <Compile Include="..\external\ARBA-comun\src\ArbaPartition.cs" Link="Arba.Comun\ArbaPartition.cs" />
+    <Compile Include="..\external\ARBA-comun\src\PartitionName.cs" Link="Arba.Comun\PartitionName.cs" />
+    <Compile Include="..\external\ARBA-comun\src\NameMatch.cs" Link="Arba.Comun\NameMatch.cs" />
   </ItemGroup>
 
 </Project>
