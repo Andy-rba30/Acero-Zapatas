@@ -78,9 +78,11 @@ así la barra guarda el recubrimiento con los bordes paralelos a ella.
   si al proyecto le falta el de 90° o el de 180°, el catálogo del plugin los ofrece igualmente
   (`Estandar - 90`, prolongación 12 diámetros; `Estandar - 180`, 4 diámetros): el tipo se crea
   en el proyecto al armar y se avisa en el resumen. La **longitud de gancho** de cada capa se puede
-  fijar en la ventana (mm, como la mide Revit): se aplica a cada barra con *Sobrescribir longitudes
-  de gancho*, sin tocar el tipo de barra; con 0 se usa la del tipo de barra. Si no cabe en el canto,
-  la comprobación de la geometría real rechaza la zapata.
+  fijar en la ventana (mm, la *Longitud de gancho* de Revit; con 0 se usa la que da el tipo de barra).
+  Al armar se usa una **copia del gancho elegido** (`Estandar - 90 - L250`, se crea la primera vez y
+  se reutiliza) con esa longitud fija en la tabla *Longitudes de gancho* del tipo de barra, sin cálculo
+  automático: el gancho elegido y el resto del proyecto no cambian. Si el gancho no cabe en el
+  canto, la comprobación de la geometría real rechaza la zapata.
 - Los tramos más cortos que `minBarLengthMm` (300 mm) se omiten y se cuentan en el aviso.
 
 ## Comprobaciones de seguridad

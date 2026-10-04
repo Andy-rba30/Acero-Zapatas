@@ -528,8 +528,9 @@ namespace FootingRebar
             panel.Children.Add(tb);
             panel.Children.Add(new TextBlock { Text = "mm (0 = la del tipo de barra)", Margin = Pad, VerticalAlignment = VerticalAlignment.Center, Foreground = RevitTheme.Muted });
             AddRow(grid, row, "Longitud gancho:", panel,
-                   "Longitud de los ganchos de la capa " + layer + ", como la mide Revit (longitud de gancho inicial/final). Se fija en cada " +
-                   "barra con \"Sobrescribir longitudes de gancho\", sin tocar el tipo de barra. 0 = la que da el tipo de barra para ese gancho. " +
+                   "Longitud de los ganchos de la capa " + layer + " (la \"Longitud de gancho\" de Revit). Al armar se usa una copia del gancho " +
+                   "elegido (p. ej. \"Estandar - 90 - L250\") con esa longitud fija en la tabla de longitudes de gancho del tipo de barra: el gancho " +
+                   "elegido y el resto del proyecto no cambian. 0 = la que da el tipo de barra para ese gancho. " +
                    "Si el gancho no cabe en el canto, la comprobacion de la geometria real rechaza la zapata.");
             return tb;
         }

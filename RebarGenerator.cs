@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Arba.Comun;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
@@ -53,8 +54,6 @@ namespace FootingRebar
             /// <summary>Tipo de barra y gancho de cada capa.</summary>
             public Dictionary<BarLayer, RebarBarType> BarTypes = new Dictionary<BarLayer, RebarBarType>();
             public Dictionary<BarLayer, ElementId> Hooks = new Dictionary<BarLayer, ElementId>();
-            /// <summary>Longitud de gancho elegida de cada capa (pies); 0 = la del tipo de barra.</summary>
-            public Dictionary<BarLayer, double> HookLengths = new Dictionary<BarLayer, double>();
             /// <summary>Orientacion de los ganchos de cada capa (se invierte sola si el gancho dobla hacia el lado equivocado).</summary>
             public Dictionary<BarLayer, bool> HookLeft = new Dictionary<BarLayer, bool>();
             public HashSet<BarLayer> HookChecked = new HashSet<BarLayer>();
@@ -74,8 +73,11 @@ namespace FootingRebar
             {
                 RebarBarType bt = FindBarType(doc, lc.BarTypeName, Layers.Name(layer));
                 c.BarTypes[layer] = bt;
-                c.Hooks[layer] = FindHookType(doc, lc.HookTypeName, c.Result.Warnings);
-                c.HookLengths[layer] = Mm(lc.HookLengthMm);
+                ElementId hook = FindHookType(doc, lc.HookTypeName, c.Result.Warnings);
+                // longitud de gancho elegida: copia del gancho con esa longitud en la tabla del tipo de barra
+                double hookLen = hook != ElementId.InvalidElementId ? Mm(Math.Round(lc.HookLengthMm)) : 0;
+                if (hookLen > 0) hook = HookWithLength(doc, hook, bt, hookLen, c.Result.Warnings);
+                c.Hooks[layer] = hook;
                 c.HookLeft[layer] = true;
                 d.Set(layer, bt.BarNominalDiameter, HookInset(bt));
             }
@@ -188,15 +190,6 @@ namespace FootingRebar
                 Rebar rb = Create(c.Doc, c.Item.Host, bt, normal, curves,
                                   b.HookStart ? hook : ElementId.InvalidElementId, b.HookEnd ? hook : ElementId.InvalidElementId, left, out string err);
                 if (rb == null) { c.Result.Failed.Add(name + ": Revit no pudo crear la barra (" + err + ")"); return true; }
-
-                // longitud de gancho elegida: antes de las comprobaciones, que leen la geometria real con ella
-                double hookLen = c.HookLengths.TryGetValue(b.Layer, out double hl) ? hl : 0;
-                if (hasHook && hookLen > 0 && !SetHookLength(rb, b.HookStart, b.HookEnd, hookLen, out string hookErr))
-                {
-                    c.Doc.Delete(rb.Id);
-                    c.Result.Rejected.Add(name + ": no se pudo fijar la longitud de gancho de " + ToMm(hookLen) + " mm (" + hookErr + ")");
-                    return false;
-                }
 
                 if (checkHook)
                 {
@@ -392,34 +385,6 @@ namespace FootingRebar
         }
 
         /// <summary>
-        /// Fija la longitud de los ganchos de esta barra (Revit: "Sobrescribir longitudes de gancho" y longitud
-        /// de gancho inicial/final), sin tocar la tabla de longitudes del tipo de barra. False si Revit no la admite.
-        /// </summary>
-        private static bool SetHookLength(Rebar rb, bool start, bool end, double len, out string err)
-        {
-            err = null;
-            try
-            {
-                rb.EnableHookLengthOverride(true);
-                foreach ((bool on, BuiltInParameter bip) in new[]
-                {
-                    (start, BuiltInParameter.REBAR_SHAPE_START_HOOK_LENGTH), (end, BuiltInParameter.REBAR_SHAPE_END_HOOK_LENGTH)
-                })
-                {
-                    if (!on) continue;
-                    Parameter p = rb.get_Parameter(bip);
-                    if (p == null || p.IsReadOnly || !p.Set(len)) { err = "la barra no admite la longitud de gancho"; return false; }
-                }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                err = ex.Message;
-                return false;
-            }
-        }
-
-        /// <summary>
         /// Marca un conjunto recien creado segun el contrato ARBA: Particion ("CIMIENTOS - ZAP-Z1", escrita en el
         /// parametro predefinido con respaldo por nombre en espanol e ingles), "ARBA - Origen" = ZAPATAS,
         /// "ARBA - Codigo" = capa (inferior, inferior-sec, superior, superior-sec) y "Metrado - Elemento" = la
@@ -477,6 +442,37 @@ namespace FootingRebar
                 throw new InvalidOperationException("el tipo de gancho \"" + other + "\" es de estilo Estribo/Tirante y Revit no lo admite en barras longitudinales de zapata (estilo Estandar); elige un gancho de estilo Estandar (p. ej. \"Estandar - 90\") o deja el gancho vacio");
             throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
         }
+
+        /// <summary>
+        /// Gancho para una longitud de gancho elegida: copia del gancho elegido llamada "Estandar - 90 - L250" (se
+        /// reutiliza si ya existe) con esa longitud fija en la tabla de longitudes de gancho del tipo de barra (sin
+        /// calculo automatico). La longitud solo afecta a las barras que usan la copia: el gancho elegido y el resto
+        /// del proyecto no cambian. Se llama dentro de la transaccion del armado.
+        /// </summary>
+        private static ElementId HookWithLength(Document doc, ElementId hookId, RebarBarType bt, double len, List<string> notes)
+        {
+            var hook = (RebarHookType)doc.GetElement(hookId);
+            string name = BaseHookName(hook.Name) + " - L" + ToMm(len);
+            RebarHookType own = AllHookTypes(doc).FirstOrDefault(h => h.Name == name);
+            if (own == null)
+            {
+                try { own = (RebarHookType)hook.Duplicate(name); }
+                catch
+                {
+                    own = RebarHookType.Create(doc, hook.HookAngle, hook.StraightLineMultiplier);
+                    own.Style = hook.Style;
+                    own.Name = name;
+                }
+                notes?.Add("creado en el proyecto el tipo de gancho \"" + name + "\" (copia de \"" + hook.Name + "\") para la longitud de gancho de " + ToMm(len) + " mm");
+            }
+            if (!bt.GetHookPermission(own.Id)) bt.SetHookPermission(own.Id, true);
+            bt.SetAutoCalcHookLengths(own.Id, false);
+            bt.SetHookLength(own.Id, len);
+            return own.Id;
+        }
+
+        /// <summary>Nombre del gancho sin el sufijo " - L250" de una copia con longitud propia.</summary>
+        private static string BaseHookName(string name) => Regex.Replace(name, @" - L\d+$", "");
 
         /// <summary>Crea en el proyecto el gancho Estandar del catalogo, admitido por todos los tipos de barra.</summary>
         private static ElementId CreateCatalogHook(Document doc, (string Name, double AngleDeg, double Multiplier) e, List<string> notes)
