@@ -173,6 +173,17 @@ namespace FootingRebar.Tests
             Near(p.HookLength[BarLayer.BottomMain], 250, "longitud de gancho de la inferior principal");
             Check(p.HookLength[BarLayer.BottomSecondary] == 0, "sin gancho elegido no hay longitud de gancho");
             Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75 + 50.8, "la longitud de gancho no cambia el retranqueo");
+
+            // regla de la longitud de gancho (ventana y generador): 0 o la predeterminada no sobrescriben; otra si; sin prolongacion recta, error
+            Check(HookLengthRule.Resolve(0, 203.2, 50.8, out string e1) == 0 && e1 == null, "0 = la predeterminada del tipo de barra, sin sobrescribir");
+            Check(HookLengthRule.Resolve(203.2, 203.2, 50.8, out e1) == 0 && e1 == null, "igual a la predeterminada: no se sobrescribe");
+            Check(HookLengthRule.Resolve(203.5, 203.2, 50.8, out e1) == 0 && e1 == null, "a menos de 0.5 mm de la predeterminada cuenta como ella");
+            Check(Math.Abs(HookLengthRule.Resolve(250, 203.2, 50.8, out e1) - 250) < 1e-9 && e1 == null, "otra longitud se sobrescribe tal cual");
+            Check(Math.Abs(HookLengthRule.Resolve(150, 203.2, 50.8, out e1) - 150) < 1e-9 && e1 == null, "se puede acortar por debajo de la predeterminada");
+            Check(HookLengthRule.Resolve(40, 203.2, 50.8, out e1) == 0 && e1 != null, "menor que el doblez: error (" + e1 + ")");
+            Check(Math.Abs(HookLengthRule.MinimumMm(50.8) - 51.8) < 1e-9, "minimo = doblez + 1 mm");
+            Check(Math.Abs(HookLengthRule.Resolve(250, null, null, out e1) - 250) < 1e-9 && e1 == null, "sin predeterminada conocida se sobrescribe lo pedido");
+            Check(HookLengthRule.Resolve(0, null, null, out e1) == 0 && e1 == null, "sin predeterminada conocida, 0 sigue siendo la del tipo");
         }
 
         private static void TopMesh()

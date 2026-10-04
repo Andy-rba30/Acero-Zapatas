@@ -86,12 +86,15 @@ namespace FootingRebar
                     hookTypes.Add(e.Name);
                     hookAngles[e.Name] = e.AngleDeg;
                 }
+            // longitud de gancho predeterminada de cada tipo de barra con cada gancho (y lo que ocupa el doblez): la casilla
+            // "Longitud gancho" de la ventana arranca con ella y solo se sobrescribe en las barras lo que se aparte de ella
+            var hookLengths = RebarGenerator.HookLengthTable(allTypes, allHooks);
 
             // --- 1. Analisis geometrico de cada elemento (solo lectura, sin transaccion) ---
             var items = hosts.Select(h => HostAnalysis.Analyze(doc, h, cfg)).ToList();
 
             // --- 2. Interfaz: el usuario revisa que se ha detectado y elige el armado ---
-            var win = new RebarOptionsWindow(cfg.Clone(), barTypes, diametersMm, hookBendMm, hookTypes, hookAngles, items);
+            var win = new RebarOptionsWindow(cfg.Clone(), barTypes, diametersMm, hookBendMm, hookTypes, hookAngles, hookLengths, items);
             try { new WindowInteropHelper(win).Owner = commandData.Application.MainWindowHandle; } catch { }
             bool? ok = win.ShowDialog();
             if (ok != true || win.Result == null) return Result.Cancelled;

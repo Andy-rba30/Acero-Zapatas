@@ -53,8 +53,12 @@ namespace FootingRebar
             /// <summary>Tipo de barra y gancho de cada capa.</summary>
             public Dictionary<BarLayer, RebarBarType> BarTypes = new Dictionary<BarLayer, RebarBarType>();
             public Dictionary<BarLayer, ElementId> Hooks = new Dictionary<BarLayer, ElementId>();
-            /// <summary>Longitud de gancho elegida de cada capa (pies); 0 = la del tipo de barra.</summary>
+            /// <summary>Longitud de gancho que se sobrescribe en las barras de cada capa (pies); 0 = se deja la del tipo de barra.</summary>
             public Dictionary<BarLayer, double> HookLengths = new Dictionary<BarLayer, double>();
+            /// <summary>Longitud de gancho predeterminada del tipo de barra para el gancho de cada capa (pies; NaN si Revit no la da).</summary>
+            public Dictionary<BarLayer, double> HookDefaults = new Dictionary<BarLayer, double>();
+            /// <summary>Capas en las que ya se aviso de que Revit deja el gancho en otra longitud que la pedida.</summary>
+            public HashSet<BarLayer> HookLengthNoted = new HashSet<BarLayer>();
             /// <summary>Orientacion de los ganchos de cada capa (se invierte sola si el gancho dobla hacia el lado equivocado).</summary>
             public Dictionary<BarLayer, bool> HookLeft = new Dictionary<BarLayer, bool>();
             public HashSet<BarLayer> HookChecked = new HashSet<BarLayer>();
@@ -74,8 +78,11 @@ namespace FootingRebar
             {
                 RebarBarType bt = FindBarType(doc, lc.BarTypeName, Layers.Name(layer));
                 c.BarTypes[layer] = bt;
-                c.Hooks[layer] = FindHookType(doc, lc.HookTypeName, c.Result.Warnings);
-                c.HookLengths[layer] = Mm(lc.HookLengthMm);
+                ElementId hook = FindHookType(doc, lc.HookTypeName, c.Result.Warnings);
+                c.Hooks[layer] = hook;
+                bool known = TryHookLength(bt, hook, out double defFt, out double bendFt);
+                c.HookDefaults[layer] = known ? defFt : double.NaN;
+                c.HookLengths[layer] = hook == ElementId.InvalidElementId ? 0 : Mm(HookLengthFor(layer, lc.HookLengthMm, known, defFt, bendFt));
                 c.HookLeft[layer] = true;
                 d.Set(layer, bt.BarNominalDiameter, HookInset(bt));
             }
@@ -126,6 +133,54 @@ namespace FootingRebar
         /// <summary>Lo mismo que HookInset, en milimetros, a partir del diametro y del diametro de doblado (para la ventana).</summary>
         public static double HookInsetMm(double diameterMm, double bendDiameterMm) =>
             0.5 * (bendDiameterMm > 0 ? bendDiameterMm : 4 * diameterMm) + diameterMm;
+
+        /// <summary>
+        /// Longitud de gancho predeterminada (mm) que cada tipo de barra da a cada gancho del proyecto (su tabla "Longitudes de
+        /// gancho", automatica o escrita a mano) y lo que ocupa el doblez (mm: longitud menos prolongacion recta), por
+        /// (tipo de barra, gancho). La ventana la muestra en la casilla de longitud de gancho. Los pares que Revit no resuelve
+        /// no entran (p. ej. un gancho que el tipo no admite).
+        /// </summary>
+        public static Dictionary<(string Bar, string Hook), (double LengthMm, double BendMm)> HookLengthTable(IEnumerable<RebarBarType> bars, IEnumerable<RebarHookType> hooks)
+        {
+            var table = new Dictionary<(string, string), (double, double)>();
+            List<RebarHookType> hookList = hooks.ToList();
+            foreach (RebarBarType bt in bars)
+                foreach (RebarHookType h in hookList)
+                    if (TryHookLength(bt, h.Id, out double len, out double bend))
+                        table[(bt.Name, h.Name)] = (ToMm(len), ToMm(bend));
+            return table;
+        }
+
+        /// <summary>
+        /// Longitud de gancho (pies) que el tipo de barra da a ese gancho y lo que ocupa el doblez (longitud menos prolongacion
+        /// recta). False si Revit no la resuelve.
+        /// </summary>
+        private static bool TryHookLength(RebarBarType bt, ElementId hookId, out double len, out double bend)
+        {
+            len = bend = 0;
+            if (hookId == null || hookId == ElementId.InvalidElementId) return false;
+            try
+            {
+                len = bt.GetHookLength(hookId);
+                double tangent = 0;
+                try { tangent = bt.GetHookTangentLength(hookId); } catch { }
+                bend = Math.Max(0, len - tangent);
+                return len > 0;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Longitud de gancho (mm) que hay que sobrescribir en las barras de la capa: 0 si no se eligio ninguna o si coincide con
+        /// la predeterminada del tipo de barra para ese gancho (Revit usa entonces la del tipo, sin sobrescribir). Lanza si la
+        /// elegida no deja prolongacion recta mas alla del doblez (known: se conocen la predeterminada defFt y el doblez bendFt).
+        /// </summary>
+        private static double HookLengthFor(BarLayer layer, double chosenMm, bool known, double defFt, double bendFt)
+        {
+            double mm = HookLengthRule.Resolve(chosenMm, known ? ToMm(defFt) : (double?)null, known ? ToMm(bendFt) : (double?)null, out string err);
+            if (err != null) throw new InvalidOperationException(Layers.Name(layer) + ": " + err);
+            return mm;
+        }
 
         /// <summary>Armado de la zapata con esta configuracion y estos diametros (lo mismo que dibuja la ventana).</summary>
         public static FootingPlan PlanFor(HostAnalysis item, AppConfig cfg, PlanDiameters d)
@@ -189,9 +244,10 @@ namespace FootingRebar
                                   b.HookStart ? hook : ElementId.InvalidElementId, b.HookEnd ? hook : ElementId.InvalidElementId, left, out string err);
                 if (rb == null) { c.Result.Failed.Add(name + ": Revit no pudo crear la barra (" + err + ")"); return true; }
 
-                // longitud de gancho elegida: antes de las comprobaciones, que leen la geometria real con ella
+                // longitud de gancho elegida (distinta de la predeterminada del tipo): se sobrescribe en la barra antes de las
+                // comprobaciones, que leen la geometria real con ella
                 double hookLen = c.HookLengths.TryGetValue(b.Layer, out double hl) ? hl : 0;
-                if (hasHook && hookLen > 0 && !SetHookLength(rb, b.HookStart, b.HookEnd, hookLen, out string hookErr))
+                if (hasHook && hookLen > 0 && !ApplyHookLength(c, rb, b.Layer, b.HookStart, b.HookEnd, hookLen, out string hookErr))
                 {
                     c.Doc.Delete(rb.Id);
                     c.Result.Rejected.Add(name + ": no se pudo fijar la longitud de gancho de " + ToMm(hookLen) + " mm (" + hookErr + ")");
@@ -392,23 +448,62 @@ namespace FootingRebar
         }
 
         /// <summary>
-        /// Fija la longitud de los ganchos de esta barra (Revit: "Sobrescribir longitudes de gancho" y longitud
-        /// de gancho inicial/final), sin tocar la tabla de longitudes del tipo de barra. False si Revit no la admite.
+        /// Sobrescribe la longitud total de los ganchos de esta barra (Revit: "Sobrescribir longitudes de gancho"), sin tocar
+        /// la tabla de longitudes del tipo de barra. Al activar la sobrescritura Revit deja modificables los parametros de
+        /// longitud de gancho de la barra: los de formula que su forma asocia a cada extremo (GetOverridableHookParameters) y
+        /// los predefinidos "Longitud de gancho inicial/final". Se escribe en el primero que lo admita de cada extremo y
+        /// despues se regenera y se vuelve a leer la longitud del gancho de la barra para comprobar que ha cambiado lo que
+        /// debia respecto a la predeterminada. False, con el motivo, si Revit no deja ninguno modificable, rechaza el valor o
+        /// no cambia nada.
         /// </summary>
-        private static bool SetHookLength(Rebar rb, bool start, bool end, double len, out string err)
+        private static bool ApplyHookLength(Ctx c, Rebar rb, BarLayer layer, bool start, bool end, double len, out string err)
         {
             err = null;
+            Document doc = c.Doc;
+            double same = Mm(HookLengthRule.SameMm);
+            double def = c.HookDefaults.TryGetValue(layer, out double d0) ? d0 : double.NaN;
             try
             {
                 rb.EnableHookLengthOverride(true);
-                foreach ((bool on, BuiltInParameter bip) in new[]
+                doc.Regenerate();
+
+                ISet<ElementId> startIds = null, endIds = null;
+                try { rb.GetOverridableHookParameters(out startIds, out _, out endIds, out _); } catch { }
+
+                var ends = new List<(int Index, ISet<ElementId> ShapeIds, BuiltInParameter Builtin)>();
+                if (start) ends.Add((0, startIds, BuiltInParameter.REBAR_SHAPE_START_HOOK_LENGTH));
+                if (end) ends.Add((1, endIds, BuiltInParameter.REBAR_SHAPE_END_HOOK_LENGTH));
+
+                var before = new Dictionary<int, double>();
+                foreach (var e in ends)
                 {
-                    (start, BuiltInParameter.REBAR_SHAPE_START_HOOK_LENGTH), (end, BuiltInParameter.REBAR_SHAPE_END_HOOK_LENGTH)
-                })
+                    before[e.Index] = HookLengthAt(rb, e.Index);
+                    var tried = new List<string>();
+                    if (!WriteHookLength(doc, rb, e.ShapeIds, e.Builtin, len, tried))
+                    {
+                        err = "Revit no deja modificable ningun parametro de longitud de gancho en el extremo " + EndName(e.Index) + " de esta barra " +
+                              (tried.Count > 0 ? "(" + string.Join("; ", tried) + ")" : "(su forma de barra no define ninguno)");
+                        return false;
+                    }
+                }
+
+                doc.Regenerate();
+                foreach (var e in ends)
                 {
-                    if (!on) continue;
-                    Parameter p = rb.get_Parameter(bip);
-                    if (p == null || p.IsReadOnly || !p.Set(len)) { err = "la barra no admite la longitud de gancho"; return false; }
+                    // Se compara el cambio (despues - antes) con el esperado (pedida - predeterminada): asi da igual si Revit
+                    // reporta la longitud total del gancho o solo su prolongacion recta.
+                    double after = HookLengthAt(rb, e.Index), was = before[e.Index];
+                    if (double.IsNaN(after) || double.IsNaN(was)) continue;   // Revit no la deja leer: no se puede comprobar
+                    double delta = after - was;
+                    double expected = double.IsNaN(def) ? len - was : len - def;
+                    if (Math.Abs(delta) < same && Math.Abs(expected) >= same)
+                    {
+                        err = "la longitud del gancho " + EndName(e.Index) + " no cambio al sobrescribirla (sigue en " + ToMm(was) + " mm)";
+                        return false;
+                    }
+                    if (Math.Abs(delta - expected) >= same && c.HookLengthNoted.Add(layer))
+                        c.Result.Warnings.Add(Layers.Name(layer) + ": longitud de gancho pedida " + ToMm(len) + " mm; el gancho ha cambiado " + ToMm(delta) +
+                                              " mm respecto a la predeterminada en vez de " + ToMm(expected) + " mm (redondeo de armadura del proyecto)");
                 }
                 return true;
             }
@@ -417,6 +512,66 @@ namespace FootingRebar
                 err = ex.Message;
                 return false;
             }
+        }
+
+        private static string EndName(int end) => end == 0 ? "inicial" : "final";
+
+        /// <summary>
+        /// Escribe la longitud en el primer parametro modificable de los dados: los de la forma de barra y, si no, el
+        /// predefinido. Anota en "tried" los que no lo admitieron y por que.
+        /// </summary>
+        private static bool WriteHookLength(Document doc, Rebar rb, ISet<ElementId> shapeIds, BuiltInParameter builtin, double len, List<string> tried)
+        {
+            var candidates = new List<Parameter>();
+            if (shapeIds != null) foreach (ElementId id in shapeIds) candidates.Add(ParamOf(doc, rb, id));
+            try { candidates.Add(rb.get_Parameter(builtin)); } catch { }
+            foreach (Parameter p in candidates)
+            {
+                if (p == null) continue;
+                string pname = p.Definition?.Name ?? "?";
+                if (p.IsReadOnly) { tried.Add(pname + ": solo lectura"); continue; }
+                try
+                {
+                    if (p.Set(len)) return true;
+                    tried.Add(pname + ": Revit rechazo el valor");
+                }
+                catch (Exception ex) { tried.Add(pname + ": " + ex.Message); }
+            }
+            return false;
+        }
+
+        /// <summary>Parametro de la barra con ese id: predefinido (id negativo) o de proyecto/compartido (ParameterElement).</summary>
+        private static Parameter ParamOf(Document doc, Rebar rb, ElementId id)
+        {
+            if (id == null || id == ElementId.InvalidElementId) return null;
+            try
+            {
+                if (id.Value < 0) return rb.get_Parameter((BuiltInParameter)id.Value);
+                var pe = doc.GetElement(id) as ParameterElement;
+                Definition def = pe?.GetDefinition();
+                return def == null ? null : rb.get_Parameter(def);
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Longitud del gancho (pies) en el extremo dado (0 inicial, 1 final) tal como la lleva la barra: el parametro predefinido
+        /// "Longitud de gancho inicial/final" o, si no lo tiene, la de sus datos de doblado. NaN si Revit no la da.
+        /// </summary>
+        private static double HookLengthAt(Rebar rb, int end)
+        {
+            try
+            {
+                Parameter p = rb.get_Parameter(end == 0 ? BuiltInParameter.REBAR_SHAPE_START_HOOK_LENGTH : BuiltInParameter.REBAR_SHAPE_END_HOOK_LENGTH);
+                if (p != null && p.StorageType == StorageType.Double && p.HasValue) return p.AsDouble();
+            }
+            catch { }
+            try
+            {
+                RebarBendData bd = rb.GetBendData();
+                return end == 0 ? bd.HookLength0 : bd.HookLength1;
+            }
+            catch { return double.NaN; }
         }
 
         /// <summary>

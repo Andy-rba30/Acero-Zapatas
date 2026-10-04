@@ -77,10 +77,15 @@ así la barra guarda el recubrimiento con los bordes paralelos a ella.
   Estándar** del proyecto (los de *Estribo/Tirante* no: Revit no los admite en estas barras) y,
   si al proyecto le falta el de 90° o el de 180°, el catálogo del plugin los ofrece igualmente
   (`Estandar - 90`, prolongación 12 diámetros; `Estandar - 180`, 4 diámetros): el tipo se crea
-  en el proyecto al armar y se avisa en el resumen. La **longitud de gancho** de cada capa se puede
-  fijar en la ventana (mm, como la mide Revit): se aplica a cada barra con *Sobrescribir longitudes
-  de gancho*, sin tocar el tipo de barra; con 0 se usa la del tipo de barra. Si no cabe en el canto,
-  la comprobación de la geometría real rechaza la zapata.
+  en el proyecto al armar y se avisa en el resumen. La **longitud de gancho** de cada capa (total,
+  como la mide Revit) arranca en la ventana con la **predeterminada** que el tipo de barra da a ese
+  gancho (su tabla *Longitudes de gancho*) y se actualiza al cambiar el tipo o el gancho; se puede
+  acortar o alargar escribiendo otra: esa se aplica a cada barra con *Sobrescribir longitudes de
+  gancho* (se activa la sobrescritura, se escribe en el parámetro de longitud de gancho que Revit deja
+  modificable en cada extremo y se vuelve a leer para comprobar que cambió), sin tocar el tipo de
+  barra. Dejar la predeterminada (o 0) no sobrescribe nada. Una longitud que no deje prolongación
+  recta más allá del doblez se rechaza con el mínimo; si el gancho no cabe en el canto, la
+  comprobación de la geometría real rechaza la zapata.
 - Los tramos más cortos que `minBarLengthMm` (300 mm) se omiten y se cuentan en el aviso.
 
 ## Comprobaciones de seguridad
@@ -105,7 +110,7 @@ qué se ha rechazado lo que no.
   armable tiene su **dirección** propia. Clic en una fila para verla en los esquemas.
 - **Dirección de las barras principales**: lado largo (por defecto), lado corto, X, Y o ángulo.
 - **Parrilla inferior**: principal y secundaria (tipo de barra, separación, gancho y longitud de
-  gancho).
+  gancho, que muestra la predeterminada del tipo de barra y el mínimo que deja el doblez).
 - **Parrilla superior**: activar, principal y secundaria.
 - La columna de entradas tiene barras de desplazamiento vertical y horizontal cuando no cabe.
 - **Recubrimientos, columnas y partición**: recubrimiento inferior (contra el terreno, 75 mm
@@ -151,7 +156,7 @@ botón Armar avisa de qué falta.
   "coverBottomMm": 75, "coverTopMm": 50, "coverEdgeMm": 75,
   "direction": { "mode": "long", "angleDeg": 0 },   // long | short | x | y | angle
   "bottom": {
-    "main":      { "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 },
+    "main":      { "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 },   // hookLengthMm 0 = la del tipo de barra
     "secondary": { "enabled": true, "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 }
   },
   "top": {

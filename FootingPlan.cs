@@ -69,6 +69,43 @@ namespace FootingRebar
         }
     }
 
+    /// <summary>
+    /// Regla de la longitud de gancho elegida para una capa frente a la predeterminada del tipo de barra (la que
+    /// Revit da a ese gancho en "Longitudes de gancho" del tipo). La comparten la ventana y el generador: la
+    /// casilla arranca con la predeterminada y solo se sobrescribe en las barras lo que se aparte de ella.
+    /// </summary>
+    public static class HookLengthRule
+    {
+        /// <summary>Diferencia (mm) por debajo de la cual la longitud elegida cuenta como la predeterminada: no se sobrescribe nada.</summary>
+        public const double SameMm = 0.5;
+        /// <summary>Prolongacion recta minima (mm) que tiene que quedar mas alla del doblez.</summary>
+        public const double MinExtensionMm = 1;
+
+        /// <summary>Longitud total minima admisible (mm) para un gancho cuyo doblez ocupa bendMm.</summary>
+        public static double MinimumMm(double bendMm) => Math.Max(0, bendMm) + MinExtensionMm;
+
+        /// <summary>
+        /// Longitud (mm) que hay que sobrescribir en la barra: 0 si no se eligio ninguna (chosenMm &lt;= 0) o si coincide
+        /// con la predeterminada (Revit usa entonces la del tipo de barra sin sobrescribir). Si se conoce lo que ocupa el
+        /// doblez y la longitud elegida no deja prolongacion recta, devuelve 0 y el motivo en error.
+        /// </summary>
+        public static double Resolve(double chosenMm, double? defaultMm, double? bendMm, out string error)
+        {
+            error = null;
+            if (double.IsNaN(chosenMm) || chosenMm <= 0) return 0;
+            if (bendMm.HasValue && chosenMm < MinimumMm(bendMm.Value))
+            {
+                error = "la longitud de gancho de " + Num(chosenMm) + " mm no deja prolongacion recta: el doblez ocupa " + Num(bendMm.Value) +
+                        " mm, minimo " + Num(MinimumMm(bendMm.Value)) + " mm";
+                return 0;
+            }
+            if (defaultMm.HasValue && Math.Abs(chosenMm - defaultMm.Value) < SameMm) return 0;
+            return chosenMm;
+        }
+
+        private static string Num(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Columna que apoya sobre la zapata, en coordenadas locales (solo para los esquemas y el informe).</summary>
     public sealed class ColumnFootprint
     {
@@ -138,7 +175,7 @@ namespace FootingRebar
         public List<BarGroup> Groups = new List<BarGroup>();
         /// <summary>Cota (desde la cara inferior) de cada capa colocada, para el esquema de la seccion.</summary>
         public Dictionary<BarLayer, double> LayerZ = new Dictionary<BarLayer, double>();
-        /// <summary>Longitud de gancho elegida de cada capa (pies; 0 = la del tipo de barra), para el esquema de la seccion.</summary>
+        /// <summary>Longitud de gancho de cada capa (pies; 0 = la del tipo de barra, desconocida aqui), para el esquema de la seccion.</summary>
         public Dictionary<BarLayer, double> HookLength = new Dictionary<BarLayer, double>();
         public List<string> Warnings = new List<string>();
         public string Error;

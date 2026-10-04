@@ -36,9 +36,9 @@ namespace FootingRebar
         /// </summary>
         public string HookTypeName { get; set; } = "";
         /// <summary>
-        /// Longitud de los ganchos de la capa (mm), tal como la mide Revit (longitud de gancho inicial/final):
-        /// se fija en cada barra con "Sobrescribir longitudes de gancho", sin tocar el tipo de barra.
-        /// 0 = la que da el tipo de barra para ese gancho.
+        /// Longitud total de los ganchos de la capa (mm), tal como la mide Revit (longitud de gancho inicial/final).
+        /// 0 = la predeterminada del tipo de barra para ese gancho (la ventana la muestra al abrir y la guarda como 0).
+        /// Otra longitud se fija en cada barra con "Sobrescribir longitudes de gancho", sin tocar el tipo de barra.
         /// </summary>
         public double HookLengthMm { get; set; } = 0;
     }
