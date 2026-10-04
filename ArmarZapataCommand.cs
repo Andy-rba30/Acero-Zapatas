@@ -55,15 +55,8 @@ namespace FootingRebar
             var allTypes = RebarGenerator.AllBarTypes(doc);
             List<string> barTypes = allTypes.Select(b => b.Name).ToList();
             var diametersMm = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            var hookBendMm = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach (RebarBarType bt in allTypes)
-            {
                 diametersMm[bt.Name] = UnitUtils.ConvertFromInternalUnits(bt.BarNominalDiameter, UnitTypeId.Millimeters);
-                double bend = 0;
-                try { bend = bt.StandardHookBendDiameter; } catch { }
-                if (bend <= 0) { try { bend = bt.StandardBendDiameter; } catch { } }
-                hookBendMm[bt.Name] = UnitUtils.ConvertFromInternalUnits(bend, UnitTypeId.Millimeters);
-            }
             if (barTypes.Count == 0)
             {
                 message = "El proyecto no tiene ningun tipo de barra (RebarBarType). Carga una familia de armadura primero.";
@@ -94,7 +87,7 @@ namespace FootingRebar
             var items = hosts.Select(h => HostAnalysis.Analyze(doc, h, cfg)).ToList();
 
             // --- 2. Interfaz: el usuario revisa que se ha detectado y elige el armado ---
-            var win = new RebarOptionsWindow(cfg.Clone(), barTypes, diametersMm, hookBendMm, hookTypes, hookAngles, hookLengths, items);
+            var win = new RebarOptionsWindow(cfg.Clone(), barTypes, diametersMm, hookTypes, hookAngles, hookLengths, items);
             try { new WindowInteropHelper(win).Owner = commandData.Application.MainWindowHandle; } catch { }
             bool? ok = win.ShowDialog();
             if (ok != true || win.Result == null) return Result.Cancelled;

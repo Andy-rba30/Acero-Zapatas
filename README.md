@@ -69,11 +69,15 @@ así la barra guarda el recubrimiento con los bordes paralelos a ella.
   cara superior; secundaria colgada debajo, repartidas en el contorno superior (la plataforma
   en una zapata escalonada). Si las dos parrillas se solapan (canto pequeño) se rechaza.
 - **Ganchos**: en los extremos que dan al borde exterior; en los bordes de un hueco la barra
-  va recta. Con gancho, el tramo recto se **retranquea el radio exterior del doblez**
-  (`diámetro de doblado del gancho / 2 + diámetro`, del tipo de barra) para que la cara exterior
-  del gancho guarde el recubrimiento lateral. El plugin crea la primera barra de cada capa, lee
-  hacia dónde dobla el gancho y si es al revés (abajo en la inferior, arriba en la superior) la
-  borra y la vuelve a crear con la otra orientación. La ventana ofrece los ganchos **de estilo
+  va recta. Revit dobla el gancho **en el propio extremo de la barra** (el extremo es la esquina
+  del doblez y la pata sale de él), así que el tramo recto llega al recubrimiento lateral como una
+  barra recta y la cara exterior de la pata queda al recubrimiento. Las **barras extremas de la
+  capa perpendicular se meten un diámetro hacia dentro**, para quedar dentro de las patas: los
+  ganchos abrazan toda la parrilla. El plugin crea la primera barra de cada capa, lee hacia dónde
+  dobla el gancho y si es al revés (abajo en la inferior, arriba en la superior) la borra y la
+  vuelve a crear con la otra orientación; si en un proyecto Revit añadiera el gancho más allá del
+  extremo (la pata sobresale del tramo recto), deshace lo creado, retranquea el tramo recto el
+  radio del doblez y vuelve a armar la zapata, avisándolo en el resumen. La ventana ofrece los ganchos **de estilo
   Estándar** del proyecto (los de *Estribo/Tirante* no: Revit no los admite en estas barras) y,
   si al proyecto le falta el de 90° o el de 180°, el catálogo del plugin los ofrece igualmente
   (`Estandar - 90`, prolongación 12 diámetros; `Estandar - 180`, 4 diámetros): el tipo se crea
@@ -244,7 +248,7 @@ cd Tests && dotnet run
 | Archivo | Qué hace |
 |---------|----------|
 | `Geometry2D.cs` | Geometría pura: contorno con huecos, recorte scan-line de una recta con franja de recubrimiento, reparto de posiciones, unión de tramos. |
-| `FootingPlan.cs` | Armado de la zapata (parrillas inferior y superior, ganchos con retranqueo, conjuntos). Pura, compartida por ventana y generador. |
+| `FootingPlan.cs` | Armado de la zapata (parrillas inferior y superior, ganchos, barras extremas dentro de las patas, conjuntos). Pura, compartida por ventana y generador. |
 | `FootingOutline.cs` | Lectura del sólido de Revit: caras inferior y superior, contornos, columnas encima, perfil de la sección; sistema local por dirección (`FootingFrame`). |
 | `HostAnalysis.cs` | Resultado por elemento (contorno o motivo de rechazo) y dirección propia. |
 | `RebarGenerator.cs` | Crea los `Rebar` con las dos redes de seguridad y la orientación automática de ganchos. |

@@ -62,6 +62,13 @@ namespace FootingRebar
             /// <summary>Orientacion de los ganchos de cada capa (se invierte sola si el gancho dobla hacia el lado equivocado).</summary>
             public Dictionary<BarLayer, bool> HookLeft = new Dictionary<BarLayer, bool>();
             public HashSet<BarLayer> HookChecked = new HashSet<BarLayer>();
+            /// <summary>
+            /// True si Revit anade el gancho mas alla del extremo de la curva en este proyecto (detectado en la primera barra
+            /// con gancho): entonces el tramo recto se retranquea el radio del doblez. Lo normal es false: Revit dobla en el extremo.
+            /// </summary>
+            public bool HooksAppended;
+            /// <summary>Place lo pone a true cuando detecta que hay que replanificar con retranqueo (Build deshace y repite).</summary>
+            public bool Replan;
         }
 
         // =================================================================
@@ -73,7 +80,6 @@ namespace FootingRebar
             var c = new Ctx { Doc = doc, Item = item, F = f, Cfg = cfg, Result = new BuildResult(), Tol = Mm(cfg.ToleranceMm) };
 
             // tipos de barra y ganchos de las capas que se van a colocar
-            var d = new PlanDiameters();
             foreach ((BarLayer layer, LayerCfg lc) in LayersFor(cfg))
             {
                 RebarBarType bt = FindBarType(doc, lc.BarTypeName, Layers.Name(layer));
@@ -84,21 +90,40 @@ namespace FootingRebar
                 c.HookDefaults[layer] = known ? defFt : double.NaN;
                 c.HookLengths[layer] = hook == ElementId.InvalidElementId ? 0 : Mm(HookLengthFor(layer, lc.HookLengthMm, known, defFt, bendFt));
                 c.HookLeft[layer] = true;
-                d.Set(layer, bt.BarNominalDiameter, HookInset(bt));
             }
 
-            c.Plan = FootingPlan.Build(f.Outline, f.TopOutline, f.Thickness, cfg, d);
-            if (c.Plan.Error != null) throw new InvalidOperationException(c.Plan.Error);
+            // Revit dobla el gancho en el propio extremo de la curva (la pata sale del extremo), asi que las barras se
+            // planifican sin retranqueo y la cara exterior de la pata queda al recubrimiento. Si al crear la primera barra con
+            // gancho de una capa el gancho sobresale del extremo (Revit lo ha anadido mas alla), se deshace lo creado, se
+            // replanifica con el retranqueo del radio del doblez y se vuelve a armar, una sola vez.
+            for (int pass = 0; ; pass++)
+            {
+                var d = new PlanDiameters();
+                foreach ((BarLayer layer, LayerCfg _) in LayersFor(cfg))
+                    d.Set(layer, c.BarTypes[layer].BarNominalDiameter, c.HooksAppended ? HookAppendInset(c.BarTypes[layer]) : 0);
+                c.Plan = FootingPlan.Build(f.Outline, f.TopOutline, f.Thickness, cfg, d);
+                if (c.Plan.Error != null) throw new InvalidOperationException(c.Plan.Error);
+
+                c.Replan = false;
+                int n = 0;
+                foreach (BarGroup g in c.Plan.Groups)
+                {
+                    n++;
+                    if (!Place(c, g, n)) break;
+                }
+                if (!c.Replan || pass > 0) break;
+
+                foreach (CreatedSet cs in c.Result.Created) { try { doc.Delete(cs.Id); } catch { } }
+                c.Result.Created.Clear(); c.Result.Rejected.Clear(); c.Result.Failed.Clear(); c.Result.ByLayer.Clear();
+                c.Result.Bars = 0;
+                c.HookChecked.Clear();
+                c.HooksAppended = true;
+                c.Result.Warnings.Add("Revit anade los ganchos mas alla del extremo de la barra en este proyecto: el tramo recto se retranquea el radio del doblez para que la pata quede al recubrimiento");
+            }
+
             c.Result.Warnings.AddRange(c.Plan.Warnings);
             if (c.Plan.Skipped > 0) c.Result.Warnings.Add(c.Plan.Skipped + " tramo(s) demasiado cortos omitidos");
             if (f.Stepped && cfg.Top.Enabled) c.Result.Warnings.Add("zapata escalonada/piramidal: la parrilla superior se reparte en la cara superior (menor)");
-
-            int n = 0;
-            foreach (BarGroup g in c.Plan.Groups)
-            {
-                n++;
-                if (!Place(c, g, n)) break;
-            }
             return c.Result;
         }
 
@@ -116,23 +141,20 @@ namespace FootingRebar
         }
 
         /// <summary>
-        /// Retranqueo del extremo recto de una barra con gancho: radio exterior del doblez del
-        /// gancho (medio diametro de doblado + un diametro de barra), para que la cara exterior
-        /// del gancho guarde el recubrimiento lateral. Si el tipo no lo define, 3 diametros.
+        /// Retranqueo del extremo recto de una barra con gancho cuando Revit anade el gancho mas alla del extremo de la
+        /// curva (Ctx.HooksAppended): radio del doblez al eje (medio diametro de doblado del gancho + medio diametro de
+        /// barra), para que la pata caiga donde caeria doblando en el extremo, con su cara exterior al recubrimiento.
+        /// Si el tipo no define el diametro de doblado, 4 diametros.
         /// </summary>
-        public static double HookInset(RebarBarType bt)
+        public static double HookAppendInset(RebarBarType bt)
         {
             double d = bt.BarNominalDiameter;
             double bend = 0;
             try { bend = bt.StandardHookBendDiameter; } catch { }
             if (bend <= 0) { try { bend = bt.StandardBendDiameter; } catch { } }
             if (bend <= 0) bend = 4 * d;
-            return 0.5 * bend + d;
+            return 0.5 * bend + 0.5 * d;
         }
-
-        /// <summary>Lo mismo que HookInset, en milimetros, a partir del diametro y del diametro de doblado (para la ventana).</summary>
-        public static double HookInsetMm(double diameterMm, double bendDiameterMm) =>
-            0.5 * (bendDiameterMm > 0 ? bendDiameterMm : 4 * diameterMm) + diameterMm;
 
         /// <summary>
         /// Longitud de gancho predeterminada (mm) que cada tipo de barra da a cada gancho del proyecto (su tabla "Longitudes de
@@ -271,6 +293,14 @@ namespace FootingRebar
                         c.Result.Rejected.Add(name + ": los ganchos doblan hacia el lado equivocado con las dos orientaciones");
                         return false;
                     }
+                    // RED DE SEGURIDAD (1c): la pata tiene que salir del extremo de la barra. Si el gancho sobresale del
+                    // extremo (Revit lo ha anadido mas alla), la zapata se replanifica con retranqueo (Build).
+                    if (!c.HooksAppended && HookOverhang(rb, p0, p1, b.HookStart, b.HookEnd) > Math.Max(c.Tol, Mm(2)))
+                    {
+                        c.Doc.Delete(rb.Id);
+                        c.Replan = true;
+                        return false;
+                    }
                     c.HookChecked.Add(b.Layer);
                 }
 
@@ -313,6 +343,30 @@ namespace FootingRebar
             }
             catch { }
             return 0;
+        }
+
+        /// <summary>
+        /// Cuanto sobresale la geometria real de la barra (eje, ganchos incluidos) mas alla de los extremos p0 / p1 del
+        /// tramo recto, en la direccion de la barra y solo por los extremos con gancho (pies). Si Revit dobla el gancho en
+        /// el extremo no sobresale nada (la pata sale del extremo); si lo anade mas alla, sobresale el radio del doblez.
+        /// NaN si no se puede leer.
+        /// </summary>
+        private static double HookOverhang(Rebar rb, XYZ p0, XYZ p1, bool hookStart, bool hookEnd)
+        {
+            try
+            {
+                XYZ dir = (p1 - p0).Normalize();
+                double over = double.NegativeInfinity;
+                IList<Curve> cl = rb.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
+                foreach (Curve cv in cl)
+                    foreach (XYZ p in cv.Tessellate())
+                    {
+                        if (hookEnd) over = Math.Max(over, (p - p1).DotProduct(dir));
+                        if (hookStart) over = Math.Max(over, (p0 - p).DotProduct(dir));
+                    }
+                return over;
+            }
+            catch { return double.NaN; }
         }
 
         /// <summary>

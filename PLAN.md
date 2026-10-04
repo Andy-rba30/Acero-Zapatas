@@ -29,7 +29,7 @@ deshace el elemento entero si una barra queda fuera del hormigon.
 | `RibbonApp.cs` | Boton **Zapatas** con icono propio en la cinta ARBA comun (`ArbaRibbon.Ensure` + `AddAcero`) | hecho |
 | `AppConfig.cs` | Configuracion (`config.json`): recubrimientos, direccion, parrillas inferior y superior, columnas, particion del contrato `{categoria} - {prefijo}-{marca}` | hecho |
 | `Geometry2D.cs` | Geometria pura: `Pt`, poligonos con huecos, recorte de una recta contra el contorno (scan-line), borde mas largo | hecho |
-| `FootingPlan.cs` | Armado puro: capas de las parrillas, ganchos con retranqueo del doblez, agrupacion en arrays | hecho |
+| `FootingPlan.cs` | Armado puro: capas de las parrillas, ganchos (barras extremas dentro de las patas de la capa perpendicular), agrupacion en arrays | hecho |
 | `FootingOutline.cs` | Lectura del solido de Revit: caras inferior y superior, contornos, columnas encima, perfil de la seccion, `FootingFrame` | hecho |
 | `HostAnalysis.cs` | Resultado por zapata (contorno o motivo de rechazo) + direccion propia | hecho |
 | `RebarGenerator.cs` | Crea los `Rebar` con las dos redes de seguridad | hecho |
@@ -53,12 +53,15 @@ deshace el elemento entero si una barra queda fuera del hormigon.
 3. **Recorte scan-line**: cada linea de barra se corta contra el contorno con huecos; cada
    intervalo interior es una barra. Las lineas consecutivas iguales se agrupan en un unico
    conjunto de Revit (array).
-4. **Ganchos**: en los extremos exteriores (recta en los huecos). El tramo recto se
-   retranquea el radio exterior del doblez (`StandardHookBendDiameter / 2 + d`) para que la
-   cara exterior del gancho guarde el recubrimiento lateral, suponiendo que Revit anade el
-   gancho mas alla del extremo de la curva. Si Revit doblara hacia dentro, la barra solo
-   quedaria unos 50 mm mas corta: no hay riesgo. La orientacion (arriba / abajo) se comprueba
-   en la geometria real de la primera barra de cada capa y se invierte si hace falta.
+4. **Ganchos**: en los extremos exteriores (recta en los huecos). Comprobado en Revit 2027:
+   Revit dobla el gancho en el propio extremo de la curva (la pata sale del extremo), asi que
+   el tramo recto llega al recubrimiento lateral sin retranqueo y la cara exterior de la pata
+   queda al recubrimiento. Las barras extremas de la capa perpendicular se meten un diametro
+   hacia dentro para quedar dentro de las patas (los ganchos abrazan la parrilla). Por si un
+   proyecto anadiera el gancho mas alla del extremo, la primera barra de cada capa mide cuanto
+   sobresale la pata y, si sobresale, la zapata se replanifica con el retranqueo del radio del
+   doblez al eje. La orientacion (arriba / abajo) se comprueba en la geometria real de la
+   primera barra de cada capa y se invierte si hace falta.
 5. **Parrilla superior** en el contorno superior (plataforma en escalonadas), con aviso.
    Rechazo si las dos parrillas se solapan.
 6. **Columnas**: solo informativas (planta, seccion e informe). Sus arranques son armado de
@@ -82,9 +85,10 @@ deshace el elemento entero si una barra queda fuera del hormigon.
 - [x] Comando e informe.
 - [x] README e INSTALADOR.
 - [x] Compilacion (dotnet build -c Release con EnableWindowsTargeting en Linux): 0 errores, 0 avisos.
-- [ ] Prueba en Revit 2027.2 por parte del usuario (no hay Revit en el entorno de la sesion).
-      En especial: comprobar que el gancho se anade mas alla del extremo (decision 4) y que
-      `Category.BuiltInCategory` filtra bien las cimentaciones del proyecto.
+- [x] Prueba en Revit 2027.2 por parte del usuario: arma; los ganchos se doblan en el extremo de
+      la curva (decision 4 corregida: sin retranqueo, barras extremas dentro de las patas).
+- [ ] Comprobar en Revit la longitud de gancho distinta de la predeterminada (sobrescritura por
+      barra) y que `Category.BuiltInCategory` filtra bien las cimentaciones del proyecto.
 
 ## Como retomar
 

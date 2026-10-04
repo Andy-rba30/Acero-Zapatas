@@ -188,8 +188,8 @@ namespace FootingRebar
                 // elegida o, si se deja la del tipo de barra, esquematica de 12 diametros
                 double len = _plan.HookLength.TryGetValue(b.Layer, out double hl) ? hl : 0;
                 double leg = len > 0 ? len : 12 * b.D, dir = Layers.IsTop(b.Layer) ? -1 : 1;
-                if (b.HookStart) HookLeg(X(b.Start), Y(b.Z), -1, dir, leg * k, b.D * k, brush, th);
-                if (b.HookEnd) HookLeg(X(b.End), Y(b.Z), 1, dir, leg * k, b.D * k, brush, th);
+                if (b.HookStart) HookLeg(X(b.Start), Y(b.Z), dir, leg * k, brush, th);
+                if (b.HookEnd) HookLeg(X(b.End), Y(b.Z), dir, leg * k, brush, th);
                 Text(Layers.Name(b.Layer) + " Ø" + Dia(b.D), X(o.VMin) + 4, Y(b.Z) + (Layers.IsTop(b.Layer) ? 2 : -14), brush, 9);
             }
 
@@ -212,14 +212,10 @@ namespace FootingRebar
             }
         }
 
-        /// <summary>Gancho esquematico: arco corto y pata vertical. side = -1 extremo inicial, +1 final; dir = +1 arriba, -1 abajo.</summary>
-        private void HookLeg(double x, double y, int side, double dir, double legPx, double dPx, Brush brush, double th)
+        /// <summary>Gancho esquematico: pata vertical que sale del extremo de la barra (Revit dobla el gancho en el extremo). dir = +1 arriba, -1 abajo.</summary>
+        private void HookLeg(double x, double y, double dir, double legPx, Brush brush, double th)
         {
-            double r = Math.Max(2, 2 * dPx);
-            // tramo horizontal corto hacia fuera (radio exterior del doblez) y pata vertical
-            double xo = x + side * r;
-            Children.Add(new Line { X1 = x, Y1 = y, X2 = xo, Y2 = y, Stroke = brush, StrokeThickness = th });
-            Children.Add(new Line { X1 = xo, Y1 = y, X2 = xo, Y2 = y - dir * Math.Max(6, legPx), Stroke = brush, StrokeThickness = th, StrokeEndLineCap = PenLineCap.Round });
+            Children.Add(new Line { X1 = x, Y1 = y, X2 = x, Y2 = y - dir * Math.Max(6, legPx), Stroke = brush, StrokeThickness = th, StrokeEndLineCap = PenLineCap.Round });
         }
 
         /// <summary>Poligono del perfil: cara inferior plana y cota superior muestreada; los tramos sin hormigon (huecos) bajan a cero.</summary>

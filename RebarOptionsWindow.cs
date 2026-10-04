@@ -24,7 +24,6 @@ namespace FootingRebar
         private readonly AppConfig _cfg;
         private readonly IList<string> _barTypes;
         private readonly IDictionary<string, double> _diametersMm;
-        private readonly IDictionary<string, double> _hookBendMm;
         private readonly Dictionary<string, string> _typeByDisplay = new Dictionary<string, string>();
         private readonly IList<string> _hookTypes;
         private readonly IDictionary<string, double> _hookAngles;
@@ -97,7 +96,7 @@ namespace FootingRebar
             return b;
         }
 
-        public RebarOptionsWindow(AppConfig cfg, IList<string> barTypes, IDictionary<string, double> diametersMm, IDictionary<string, double> hookBendMm,
+        public RebarOptionsWindow(AppConfig cfg, IList<string> barTypes, IDictionary<string, double> diametersMm,
                                   IList<string> hookTypes, IDictionary<string, double> hookAngles,
                                   IDictionary<(string Bar, string Hook), (double LengthMm, double BendMm)> hookLengths, IList<HostAnalysis> items)
         {
@@ -106,7 +105,6 @@ namespace FootingRebar
             _cfg = cfg;
             _cfg.Normalize();
             _diametersMm = diametersMm;
-            _hookBendMm = hookBendMm ?? new Dictionary<string, double>();
             _barTypes = barTypes.OrderBy(n => diametersMm.TryGetValue(n, out double mm) ? mm : 0)
                                 .ThenBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
             foreach (string n in _barTypes) _typeByDisplay[TypeDisplay(n)] = n;
@@ -283,8 +281,9 @@ namespace FootingRebar
             bm.Children.Add(_bmHook);
             AddRow(grid, r++, "Principal:", bm,
                    "Separacion maxima entre barras (se reparten por igual sin superarla, con barra en los dos extremos al recubrimiento lateral) y " +
-                   "gancho en los dos extremos de cada barra (dobla hacia arriba). Con gancho, el tramo recto se retranquea el radio exterior del " +
-                   "doblez para que la cara exterior del gancho guarde el recubrimiento. En los bordes de un hueco la barra va recta.");
+                   "gancho en los dos extremos de cada barra (dobla hacia arriba). La pata del gancho sale del extremo de la barra, con su cara " +
+                   "exterior al recubrimiento lateral, y las barras extremas de la capa perpendicular se meten dentro de las patas. En los bordes " +
+                   "de un hueco la barra va recta.");
             _bmHl = HookLengthRow(grid, r++, m.Main.HookLengthMm, "inferior principal", _bmType, _bmHook);
 
             _bsOn = new CheckBox { Content = "Colocar secundaria (v), encima de la principal", IsChecked = m.Secondary.Enabled, Margin = Pad };
@@ -650,13 +649,6 @@ namespace FootingRebar
             return match != null && _diametersMm.TryGetValue(match, out double mm) ? FootingPlan.Mm(mm) : 0;
         }
 
-        private double HookInsetFt(string typeName, double diameterFt)
-        {
-            string match = NameMatch.First(_barTypes, typeName);
-            double bend = match != null && _hookBendMm.TryGetValue(match, out double mm) ? mm : 0;
-            return FootingPlan.Mm(RebarGenerator.HookInsetMm(diameterFt * FootingPlan.MmPerFt, bend));
-        }
-
         // ------------------------------------------------------------------
         // Lectura de la configuracion desde los controles
         // ------------------------------------------------------------------
@@ -734,7 +726,7 @@ namespace FootingRebar
             {
                 double ft = DiameterFt(lc.BarTypeName);
                 if (ft <= 0) { ft = FootingPlan.Mm(12.7); allChosen = false; }
-                d.Set(layer, ft, HookInsetFt(lc.BarTypeName, ft));
+                d.Set(layer, ft);
             }
             return d;
         }

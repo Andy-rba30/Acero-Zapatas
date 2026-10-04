@@ -51,9 +51,11 @@ namespace FootingRebar
 
     /// <summary>
     /// Diametros (pies) de cada capa, ya resueltos a partir de los tipos de barra, y el
-    /// retranqueo del extremo recto cuando la barra lleva gancho: radio exterior del doblez
-    /// (medio diametro de doblado del gancho + un diametro de barra), para que la cara
-    /// exterior del gancho guarde el recubrimiento lateral. 0 si la capa va recta.
+    /// retranqueo del extremo recto de las barras con gancho. Revit dobla el gancho en el propio
+    /// extremo de la curva (el extremo es la esquina del doblez y la pata sale de el), asi que lo
+    /// normal es 0: el tramo recto llega al recubrimiento como una barra recta y la cara exterior
+    /// de la pata queda al recubrimiento. Solo si un proyecto anade el gancho mas alla del extremo
+    /// (lo detecta el generador en la primera barra) vale el radio del doblez al eje.
     /// </summary>
     public sealed class PlanDiameters
     {
@@ -123,7 +125,7 @@ namespace FootingRebar
     /// Una barra recta planificada, en coordenadas locales de la zapata (pies). Va a lo largo
     /// de u (AlongU, en la recta v = Coord) o de v (en la recta u = Coord), de Start a End,
     /// a la cota Z medida desde la cara inferior. Si lleva gancho en un extremo, el tramo
-    /// recto ya esta retranqueado para que el doblez guarde el recubrimiento.
+    /// recto llega al recubrimiento y la pata del gancho sale de su extremo.
     /// </summary>
     public sealed class PlannedBar
     {
@@ -221,7 +223,7 @@ namespace FootingRebar
         /// <param name="bottom">Contorno de la cara inferior en coordenadas locales (u = direccion de las barras principales).</param>
         /// <param name="top">Contorno de la cara superior en las mismas coordenadas; null = el mismo que el inferior.</param>
         /// <param name="thickness">Canto de la zapata (pies), de la cara inferior a la superior.</param>
-        /// <param name="d">Diametros de cada capa (pies) y retranqueo por gancho.</param>
+        /// <param name="d">Diametros de cada capa (pies) y retranqueo del extremo con gancho (normalmente 0).</param>
         public static FootingPlan Build(Outline2D bottom, Outline2D top, double thickness, AppConfig cfg, PlanDiameters d)
         {
             var p = new FootingPlan
@@ -239,17 +241,19 @@ namespace FootingRebar
                 }
 
                 // --- parrilla inferior: principal (la mas baja) y secundaria encima ---
+                // Las barras extremas de cada capa se meten dentro de las patas de los ganchos de la capa perpendicular
+                // (un diametro de esa capa junto a la cara lateral), para que los ganchos abracen toda la parrilla.
                 double d1 = d.Of(BarLayer.BottomMain);
+                double d2 = cfg.Bottom.Secondary.Enabled ? d.Of(BarLayer.BottomSecondary) : 0;
                 double z1 = p.CoverBottom + 0.5 * d1;
                 p.LayerZ[BarLayer.BottomMain] = z1;
-                p.Mesh(BarLayer.BottomMain, p.Outline, z1, d1, d.HookInsetOf(BarLayer.BottomMain), cfg.Bottom.Main);
+                p.Mesh(BarLayer.BottomMain, p.Outline, z1, d1, d.HookInsetOf(BarLayer.BottomMain), LegInset(cfg.Bottom.Secondary, d2), cfg.Bottom.Main);
                 double bottomTop = p.CoverBottom + d1;
                 if (cfg.Bottom.Secondary.Enabled)
                 {
-                    double d2 = d.Of(BarLayer.BottomSecondary);
                     double z2 = p.CoverBottom + d1 + 0.5 * d2;
                     p.LayerZ[BarLayer.BottomSecondary] = z2;
-                    p.Mesh(BarLayer.BottomSecondary, p.Outline, z2, d2, d.HookInsetOf(BarLayer.BottomSecondary), cfg.Bottom.Secondary);
+                    p.Mesh(BarLayer.BottomSecondary, p.Outline, z2, d2, d.HookInsetOf(BarLayer.BottomSecondary), LegInset(cfg.Bottom.Main, d1), cfg.Bottom.Secondary);
                     bottomTop += d2;
                 }
 
@@ -257,16 +261,16 @@ namespace FootingRebar
                 if (cfg.Top.Enabled)
                 {
                     double dt1 = d.Of(BarLayer.TopMain);
+                    double dt2 = cfg.Top.Secondary.Enabled ? d.Of(BarLayer.TopSecondary) : 0;
                     double zt1 = thickness - p.CoverTop - 0.5 * dt1;
                     p.LayerZ[BarLayer.TopMain] = zt1;
                     double topBottom = thickness - p.CoverTop - dt1;
-                    p.Mesh(BarLayer.TopMain, p.TopOutline, zt1, dt1, d.HookInsetOf(BarLayer.TopMain), cfg.Top.Main);
+                    p.Mesh(BarLayer.TopMain, p.TopOutline, zt1, dt1, d.HookInsetOf(BarLayer.TopMain), LegInset(cfg.Top.Secondary, dt2), cfg.Top.Main);
                     if (cfg.Top.Secondary.Enabled)
                     {
-                        double dt2 = d.Of(BarLayer.TopSecondary);
                         double zt2 = thickness - p.CoverTop - dt1 - 0.5 * dt2;
                         p.LayerZ[BarLayer.TopSecondary] = zt2;
-                        p.Mesh(BarLayer.TopSecondary, p.TopOutline, zt2, dt2, d.HookInsetOf(BarLayer.TopSecondary), cfg.Top.Secondary);
+                        p.Mesh(BarLayer.TopSecondary, p.TopOutline, zt2, dt2, d.HookInsetOf(BarLayer.TopSecondary), LegInset(cfg.Top.Main, dt1), cfg.Top.Secondary);
                         topBottom -= dt2;
                     }
                     if (topBottom < bottomTop + Mm(25))
@@ -295,17 +299,26 @@ namespace FootingRebar
         }
 
         /// <summary>
+        /// Grosor que ocupan las patas de los ganchos de la capa perpendicular junto a las caras laterales (su
+        /// diametro, si se coloca y lleva gancho; 0 si va recta): las barras extremas de esta capa se meten ese grosor
+        /// hacia dentro para quedar dentro de las patas.
+        /// </summary>
+        private static double LegInset(LayerCfg perpendicular, double perpendicularD) =>
+            perpendicularD > 0 && !string.IsNullOrEmpty(perpendicular.HookTypeName) ? perpendicularD : 0;
+
+        /// <summary>
         /// Capa de barras corridas equiespaciadas en el contorno dado: a lo largo de u
         /// (repartidas en v) o de v (repartidas en u), con la separacion como maximo y barra en
-        /// los dos extremos al recubrimiento lateral. Cada recta se recorta contra el contorno
-        /// con sus huecos; cada tramo interior es una barra, con gancho en los extremos que dan
-        /// al borde exterior (si la capa lo lleva) y recta en los que dan a un hueco.
+        /// los dos extremos al recubrimiento lateral (mas las patas de la capa perpendicular,
+        /// legInset, si las hay). Cada recta se recorta contra el contorno con sus huecos; cada
+        /// tramo interior es una barra, con gancho en los extremos que dan al borde exterior (si
+        /// la capa lo lleva) y recta en los que dan a un hueco.
         /// </summary>
-        private void Mesh(BarLayer layer, Outline2D o, double z, double d, double hookInset, LayerCfg cfg)
+        private void Mesh(BarLayer layer, Outline2D o, double z, double d, double hookInset, double legInset, LayerCfg cfg)
         {
             bool alongU = Layers.AlongU(layer);
-            double from = (alongU ? o.VMin : o.UMin) + CoverEdge + 0.5 * d;
-            double to = (alongU ? o.VMax : o.UMax) - CoverEdge - 0.5 * d;
+            double from = (alongU ? o.VMin : o.UMin) + CoverEdge + legInset + 0.5 * d;
+            double to = (alongU ? o.VMax : o.UMax) - CoverEdge - legInset - 0.5 * d;
             if (to <= from) { Warnings.Add("no cabe la capa " + Layers.Name(layer)); return; }
             bool hook = !string.IsNullOrEmpty(cfg.HookTypeName);
             double inset = hook ? Math.Max(0, hookInset) : 0;

@@ -28,8 +28,8 @@ namespace FootingRebar.Tests
         private static List<Pt> Box(double u1, double v1, double u2, double v2) =>
             new List<Pt> { new Pt(Mm(u1), Mm(v1)), new Pt(Mm(u2), Mm(v1)), new Pt(Mm(u2), Mm(v2)), new Pt(Mm(u1), Mm(v2)) };
 
-        /// <summary>Diametros de 1/2" (12.7 mm) en todas las capas; retranqueo por gancho de 3 d + d (doblado 6 d) = 50.8 mm.</summary>
-        private static PlanDiameters Diam(double hookInsetMm = 50.8)
+        /// <summary>Diametros de 1/2" (12.7 mm) en todas las capas; sin retranqueo del extremo con gancho (Revit dobla en el extremo) salvo que se pida.</summary>
+        private static PlanDiameters Diam(double hookInsetMm = 0)
         {
             var d = new PlanDiameters();
             foreach (BarLayer l in Layers.All) d.Set(l, Mm(12.7), Mm(hookInsetMm));
@@ -156,15 +156,22 @@ namespace FootingRebar.Tests
             Check(p.Error == null, "sin error: " + p.Error);
             PlannedBar b = p.Bars.First(x => x.Layer == BarLayer.BottomMain);
             Check(b.HookStart && b.HookEnd, "ganchos en los dos extremos exteriores");
-            // tramo recto retranqueado el radio exterior del doblez (50.8) para que el gancho guarde el recubrimiento
-            Near(b.Start, 75 + 50.8, "tramo recto empieza a recubrimiento + radio exterior del doblez");
-            Near(b.End, 3000 - 75 - 50.8, "y termina igual por el otro lado");
+            // Revit dobla el gancho en el extremo: el tramo recto llega al recubrimiento como una barra recta y la pata sale de ahi
+            Near(b.Start, 75, "tramo recto empieza al recubrimiento lateral (la pata sale del extremo)");
+            Near(b.End, 3000 - 75, "y termina igual por el otro lado");
+            // las barras extremas se meten dentro de las patas de la capa perpendicular: recubrimiento + diametro de esa capa + medio diametro
+            Near(b.Coord, 75 + 12.7 + 6.35, "la primera principal queda dentro de las patas de la secundaria");
+            PlannedBar s = p.Bars.First(x => x.Layer == BarLayer.BottomSecondary);
+            Near(s.Coord, 75 + 12.7 + 6.35, "la primera secundaria queda dentro de las patas de la principal");
+            Near(s.Start, 75, "la secundaria tambien llega al recubrimiento");
             Check(p.DescribeLayers().Contains("gancho"), "el desglose menciona el gancho");
-            // sin retranqueo (tipo sin diametro de doblado conocido -> 0)
-            p = FootingPlan.Build(Rect(3000, 2000), null, Mm(600), c, Diam(0));
-            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75, "sin retranqueo el tramo recto empieza al recubrimiento");
             // el gancho no cambia el numero de barras ni los conjuntos
-            Check(p.CountOf(BarLayer.BottomMain) == 11 && p.Groups.Count == 2, "mismo numero de barras y conjuntos con gancho");
+            Check(p.CountOf(BarLayer.BottomMain) == 11 && p.CountOf(BarLayer.BottomSecondary) == 16 && p.Groups.Count == 2,
+                  "mismo numero de barras y conjuntos con gancho (" + p.CountOf(BarLayer.BottomMain) + ", " + p.CountOf(BarLayer.BottomSecondary) + ")");
+            // si en un proyecto Revit anade el gancho mas alla del extremo, el generador replanifica con el retranqueo del radio del doblez
+            p = FootingPlan.Build(Rect(3000, 2000), null, Mm(600), c, Diam(44.45));
+            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75 + 44.45, "con retranqueo el tramo recto se mete el radio del doblez");
+            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Coord, 75 + 12.7 + 6.35, "el retranqueo no mueve las barras extremas");
             // longitud de gancho elegida: llega al plan (esquema de la seccion) solo en las capas con gancho y no mueve las barras
             c.Bottom.Main.HookLengthMm = 250;
             c.Bottom.Secondary.HookTypeName = "";
@@ -172,7 +179,10 @@ namespace FootingRebar.Tests
             p = FootingPlan.Build(Rect(3000, 2000), null, Mm(600), c, Diam());
             Near(p.HookLength[BarLayer.BottomMain], 250, "longitud de gancho de la inferior principal");
             Check(p.HookLength[BarLayer.BottomSecondary] == 0, "sin gancho elegido no hay longitud de gancho");
-            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75 + 50.8, "la longitud de gancho no cambia el retranqueo");
+            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75, "la longitud de gancho no mueve el tramo recto");
+            // sin gancho en la secundaria no hay patas que esquivar: la principal extrema vuelve al recubrimiento + medio diametro
+            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Coord, 75 + 6.35, "sin gancho en la secundaria, la principal extrema al recubrimiento + medio diametro");
+            Near(p.Bars.First(x => x.Layer == BarLayer.BottomSecondary).Coord, 75 + 12.7 + 6.35, "la secundaria recta sigue dentro de las patas de la principal");
 
             // regla de la longitud de gancho (ventana y generador): 0 o la predeterminada no sobrescriben; otra si; sin prolongacion recta, error
             Check(HookLengthRule.Resolve(0, 203.2, 50.8, out string e1) == 0 && e1 == null, "0 = la predeterminada del tipo de barra, sin sobrescribir");
@@ -224,8 +234,9 @@ namespace FootingRebar.Tests
             // superior principal repartida en v entre 500 + 81.35 y 1500 - 81.35 -> 837.3 / 200 -> 5 huecos -> 6 barras
             Check(p.CountOf(BarLayer.TopMain) == 6, "superior principal en la plataforma 1.5 x 1.0: 6 barras (" + p.CountOf(BarLayer.TopMain) + ")");
             t = p.Bars.First(x => x.Layer == BarLayer.TopMain);
-            Near(t.Start, 750 + 75 + 50.8, "superior principal empieza en la plataforma + recubrimiento + doblez");
-            Near(t.End, 2250 - 75 - 50.8, "y termina en el otro borde de la plataforma");
+            Near(t.Start, 750 + 75, "superior principal empieza en la plataforma + recubrimiento");
+            Near(t.End, 2250 - 75, "y termina en el otro borde de la plataforma");
+            Near(p.Bars.First(x => x.Layer == BarLayer.TopSecondary).Coord, 750 + 75 + 12.7 + 6.35, "la superior secundaria extrema queda dentro de las patas de la superior principal");
             Check(p.Bars.Where(x => Layers.IsTop(x.Layer)).All(x => top.Contains(new Pt(x.AlongU ? 0.5 * (x.Start + x.End) : x.Coord, x.AlongU ? x.Coord : 0.5 * (x.Start + x.End)))),
                   "todas las barras superiores dentro de la plataforma");
         }
