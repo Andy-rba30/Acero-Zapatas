@@ -73,7 +73,11 @@ así la barra guarda el recubrimiento con los bordes paralelos a ella.
   (`diámetro de doblado del gancho / 2 + diámetro`, del tipo de barra) para que la cara exterior
   del gancho guarde el recubrimiento lateral. El plugin crea la primera barra de cada capa, lee
   hacia dónde dobla el gancho y si es al revés (abajo en la inferior, arriba en la superior) la
-  borra y la vuelve a crear con la otra orientación.
+  borra y la vuelve a crear con la otra orientación. La ventana ofrece los ganchos **de estilo
+  Estándar** del proyecto (los de *Estribo/Tirante* no: Revit no los admite en estas barras) y,
+  si al proyecto le falta el de 90° o el de 180°, el catálogo del plugin los ofrece igualmente
+  (`Estandar - 90`, prolongación 12 diámetros; `Estandar - 180`, 4 diámetros): el tipo se crea
+  en el proyecto al armar y se avisa en el resumen.
 - Los tramos más cortos que `minBarLengthMm` (300 mm) se omiten y se cuentan en el aviso.
 
 ## Comprobaciones de seguridad

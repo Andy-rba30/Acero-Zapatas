@@ -79,6 +79,13 @@ namespace FootingRebar
                 try { deg = Math.Round(h.HookAngle * 180 / Math.PI); } catch { }
                 hookAngles[h.Name] = deg;
             }
+            // catalogo de ganchos estandar: el angulo que el proyecto no tenga se ofrece igualmente y el tipo se crea al armar
+            foreach (var e in RebarGenerator.HookCatalog)
+                if (!hookAngles.Values.Contains(e.AngleDeg) && !hookTypes.Contains(e.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    hookTypes.Add(e.Name);
+                    hookAngles[e.Name] = e.AngleDeg;
+                }
 
             // --- 1. Analisis geometrico de cada elemento (solo lectura, sin transaccion) ---
             var items = hosts.Select(h => HostAnalysis.Analyze(doc, h, cfg)).ToList();

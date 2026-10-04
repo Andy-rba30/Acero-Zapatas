@@ -72,7 +72,7 @@ namespace FootingRebar
             {
                 RebarBarType bt = FindBarType(doc, lc.BarTypeName, Layers.Name(layer));
                 c.BarTypes[layer] = bt;
-                c.Hooks[layer] = FindHookType(doc, lc.HookTypeName);
+                c.Hooks[layer] = FindHookType(doc, lc.HookTypeName, c.Result.Warnings);
                 c.HookLeft[layer] = true;
                 d.Set(layer, bt.BarNominalDiameter, HookInset(bt));
             }
@@ -404,15 +404,50 @@ namespace FootingRebar
             return all.First(b => b.Name == match);
         }
 
-        /// <summary>Id del tipo de gancho, o InvalidElementId si el nombre esta vacio. Lanza si el nombre no existe.</summary>
-        public static ElementId FindHookType(Document doc, string name)
+        /// <summary>
+        /// Catalogo de ganchos estandar para barras longitudinales (90 grados con prolongacion de 12 diametros y
+        /// 180 grados con 4). La ventana ofrece los de este catalogo cuyo angulo no tenga el proyecto entre sus
+        /// ganchos de estilo Estandar, y el tipo se crea en el proyecto al armar (FindHookType).
+        /// </summary>
+        public static readonly (string Name, double AngleDeg, double Multiplier)[] HookCatalog =
+        {
+            ("Estandar - 90", 90, 12),
+            ("Estandar - 180", 180, 4),
+        };
+
+        /// <summary>
+        /// Id del tipo de gancho, o InvalidElementId si el nombre esta vacio. Si el proyecto no lo tiene pero es
+        /// del catalogo, lo crea (se llama dentro de la transaccion del armado) y lo anota en "notes". Lanza si
+        /// el nombre no existe.
+        /// </summary>
+        public static ElementId FindHookType(Document doc, string name, List<string> notes = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return ElementId.InvalidElementId;
             var all = AllHookTypes(doc);
             string match = NameMatch.First(all.Select(h => h.Name), name);
-            if (match == null)
-                throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
-            return all.First(h => h.Name == match).Id;
+            if (match != null) return all.First(h => h.Name == match).Id;
+
+            string entry = NameMatch.First(HookCatalog.Select(e => e.Name), name);
+            if (entry != null) return CreateCatalogHook(doc, HookCatalog.First(e => e.Name == entry), notes);
+
+            // Puede que el nombre exista pero sea un gancho de estribo/tirante: Revit no lo admite
+            // en barras de estilo Estandar (falla con "internal error" al crear la barra), asi que se avisa claro.
+            string other = NameMatch.First(HookTypesOf(doc).Select(h => h.Name), name);
+            if (other != null)
+                throw new InvalidOperationException("el tipo de gancho \"" + other + "\" es de estilo Estribo/Tirante y Revit no lo admite en barras longitudinales de zapata (estilo Estandar); elige un gancho de estilo Estandar (p. ej. \"Estandar - 90\") o deja el gancho vacio");
+            throw new InvalidOperationException("el tipo de gancho \"" + name + "\" no existe en este proyecto; elige uno de los cargados en la ventana o deja el gancho vacio");
+        }
+
+        /// <summary>Crea en el proyecto el gancho Estandar del catalogo, admitido por todos los tipos de barra.</summary>
+        private static ElementId CreateCatalogHook(Document doc, (string Name, double AngleDeg, double Multiplier) e, List<string> notes)
+        {
+            RebarHookType h = RebarHookType.Create(doc, e.AngleDeg * Math.PI / 180, e.Multiplier);
+            try { h.Style = RebarStyle.Standard; } catch { }
+            try { h.Name = e.Name; } catch { }
+            foreach (RebarBarType bt in AllBarTypes(doc))
+                try { if (!bt.GetHookPermission(h.Id)) bt.SetHookPermission(h.Id, true); } catch { }
+            notes?.Add("creado en el proyecto el tipo de gancho \"" + h.Name + "\" (Estandar, " + e.AngleDeg + " grados, prolongacion " + e.Multiplier + " diametros)");
+            return h.Id;
         }
 
         // La coincidencia de nombres de tipo (exacta, si no el primero que contiene el fragmento; nunca se sustituye
@@ -423,8 +458,28 @@ namespace FootingRebar
             new FilteredElementCollector(doc).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
                 .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
 
+        /// <summary>
+        /// Tipos de gancho de estilo Estandar, los unicos que Revit admite en las barras de zapata
+        /// (todas se crean con RebarStyle.Standard). Los de estilo Estribo/Tirante se excluyen:
+        /// si se asignan a una barra Estandar, Revit falla al crearla ("An internal error has occurred").
+        /// </summary>
         public static List<RebarHookType> AllHookTypes(Document doc) =>
-            new FilteredElementCollector(doc).OfClass(typeof(RebarHookType)).Cast<RebarHookType>()
+            HookTypesOf(doc).Where(IsStandardHook)
                 .OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+        /// <summary>Todos los tipos de gancho del proyecto, de cualquier estilo.</summary>
+        private static List<RebarHookType> HookTypesOf(Document doc)
+        {
+            var list = new FilteredElementCollector(doc).OfClass(typeof(RebarHookType)).Cast<RebarHookType>().ToList();
+            // respaldo: recorrer los tipos del proyecto por si el filtro por clase no los devuelve
+            if (list.Count == 0) list = new FilteredElementCollector(doc).WhereElementIsElementType().OfType<RebarHookType>().ToList();
+            return list;
+        }
+
+        /// <summary>True si el gancho es de estilo Estandar (si la API no lo dice, se admite).</summary>
+        public static bool IsStandardHook(RebarHookType h)
+        {
+            try { return h.Style == RebarStyle.Standard; } catch { return true; }
+        }
     }
 }
