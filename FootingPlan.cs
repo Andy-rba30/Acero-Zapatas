@@ -138,6 +138,8 @@ namespace FootingRebar
         public List<BarGroup> Groups = new List<BarGroup>();
         /// <summary>Cota (desde la cara inferior) de cada capa colocada, para el esquema de la seccion.</summary>
         public Dictionary<BarLayer, double> LayerZ = new Dictionary<BarLayer, double>();
+        /// <summary>Longitud de gancho elegida de cada capa (pies; 0 = la del tipo de barra), para el esquema de la seccion.</summary>
+        public Dictionary<BarLayer, double> HookLength = new Dictionary<BarLayer, double>();
         public List<string> Warnings = new List<string>();
         public string Error;
         /// <summary>Tramos demasiado cortos que se han omitido.</summary>
@@ -270,6 +272,7 @@ namespace FootingRebar
             if (to <= from) { Warnings.Add("no cabe la capa " + Layers.Name(layer)); return; }
             bool hook = !string.IsNullOrEmpty(cfg.HookTypeName);
             double inset = hook ? Math.Max(0, hookInset) : 0;
+            HookLength[layer] = hook ? Mm(Math.Max(0, cfg.HookLengthMm)) : 0;
             foreach (double c in Geometry2D.Positions(from, to, Mm(cfg.SpacingMm), _tol))
                 foreach (Span s in o.Cut(alongU, c, CoverEdge + 0.5 * d, _tol))
                 {

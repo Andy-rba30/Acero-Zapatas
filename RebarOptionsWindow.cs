@@ -38,12 +38,12 @@ namespace FootingRebar
         private TextBox _angle;
         // parrilla inferior
         private ComboBox _bmType, _bmHook, _bsType, _bsHook;
-        private TextBox _bmSp, _bsSp;
+        private TextBox _bmSp, _bsSp, _bmHl, _bsHl;
         private CheckBox _bsOn;
         // parrilla superior
         private CheckBox _tOn, _tsOn;
         private ComboBox _tmType, _tmHook, _tsType, _tsHook;
-        private TextBox _tmSp, _tsSp;
+        private TextBox _tmSp, _tsSp, _tmHl, _tsHl;
         // general
         private TextBox _coverB, _coverT, _coverE, _partition;
         private CheckBox _columns;
@@ -131,8 +131,9 @@ namespace FootingRebar
             left.Children.Add(BuildGeneral());
             var scroll = new ScrollViewer
             {
+                // entradas: barras de desplazamiento vertical y horizontal cuando no caben (nada queda recortado)
                 Content = left, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Margin = new Thickness(0, 0, 8, 0)
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, Margin = new Thickness(0, 0, 8, 0)
             };
             Grid.SetColumn(scroll, 0);
             body.Children.Add(scroll);
@@ -260,6 +261,7 @@ namespace FootingRebar
                    "Separacion maxima entre barras (se reparten por igual sin superarla, con barra en los dos extremos al recubrimiento lateral) y " +
                    "gancho en los dos extremos de cada barra (dobla hacia arriba). Con gancho, el tramo recto se retranquea el radio exterior del " +
                    "doblez para que la cara exterior del gancho guarde el recubrimiento. En los bordes de un hueco la barra va recta.");
+            _bmHl = HookLengthRow(grid, r++, m.Main.HookLengthMm, "inferior principal");
 
             _bsOn = new CheckBox { Content = "Colocar secundaria (v), encima de la principal", IsChecked = m.Secondary.Enabled, Margin = Pad };
             AddRow(grid, r++, "", _bsOn, "Barras inferiores perpendiculares, apoyadas sobre la capa principal. En una zapata siempre se colocan las dos direcciones.");
@@ -272,6 +274,7 @@ namespace FootingRebar
             _bsHook = HookCombo(m.Secondary.HookTypeName); _bsHook.Width = 220; Hook(_bsHook);
             bs.Children.Add(_bsHook);
             AddRow(grid, r++, "Secundaria:", bs, "Separacion maxima y gancho en los extremos (hacia arriba) de la capa inferior secundaria.");
+            _bsHl = HookLengthRow(grid, r++, m.Secondary.HookLengthMm, "inferior secundaria");
             group.Content = grid;
             return group;
         }
@@ -295,6 +298,7 @@ namespace FootingRebar
             _tmHook = HookCombo(m.Main.HookTypeName); _tmHook.Width = 220; Hook(_tmHook);
             tm.Children.Add(_tmHook);
             AddRow(grid, r++, "Principal:", tm, "Separacion maxima y gancho en los extremos (hacia abajo) de la capa superior principal.");
+            _tmHl = HookLengthRow(grid, r++, m.Main.HookLengthMm, "superior principal");
 
             _tsOn = new CheckBox { Content = "Colocar secundaria (v), debajo de la principal", IsChecked = m.Secondary.Enabled, Margin = Pad };
             AddRow(grid, r++, "", _tsOn, "Barras superiores perpendiculares, colgadas bajo la capa superior principal.");
@@ -307,6 +311,7 @@ namespace FootingRebar
             _tsHook = HookCombo(m.Secondary.HookTypeName); _tsHook.Width = 220; Hook(_tsHook);
             ts.Children.Add(_tsHook);
             AddRow(grid, r++, "Secundaria:", ts, "Separacion maxima y gancho en los extremos (hacia abajo) de la capa superior secundaria.");
+            _tsHl = HookLengthRow(grid, r++, m.Secondary.HookLengthMm, "superior secundaria");
             group.Content = grid;
             return group;
         }
@@ -515,6 +520,20 @@ namespace FootingRebar
             return cb;
         }
 
+        /// <summary>Fila "Longitud gancho": casilla en mm (0 = la del tipo de barra) de la capa dada.</summary>
+        private TextBox HookLengthRow(Grid grid, int row, double mm, string layer)
+        {
+            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            TextBox tb = NumBox(mm); Hook(tb);
+            panel.Children.Add(tb);
+            panel.Children.Add(new TextBlock { Text = "mm (0 = la del tipo de barra)", Margin = Pad, VerticalAlignment = VerticalAlignment.Center, Foreground = RevitTheme.Muted });
+            AddRow(grid, row, "Longitud gancho:", panel,
+                   "Longitud de los ganchos de la capa " + layer + ", como la mide Revit (longitud de gancho inicial/final). Se fija en cada " +
+                   "barra con \"Sobrescribir longitudes de gancho\", sin tocar el tipo de barra. 0 = la que da el tipo de barra para ese gancho. " +
+                   "Si el gancho no cabe en el canto, la comprobacion de la geometria real rechaza la zapata.");
+            return tb;
+        }
+
         private string HookDisplay(string name) =>
             _hookAngles.TryGetValue(name, out double deg) && name.IndexOf(Num(deg), StringComparison.Ordinal) < 0 ? name + " (" + Num(deg) + " grados)" : name;
 
@@ -549,20 +568,24 @@ namespace FootingRebar
             b.Main.BarTypeName = TypeOf(_bmType);
             b.Main.SpacingMm = ReadNum(_bmSp, "separacion inferior principal", 1, errors);
             b.Main.HookTypeName = HookOf(_bmHook);
+            b.Main.HookLengthMm = ReadNum(_bmHl, "longitud de gancho inferior principal", 0, errors);
             b.Secondary.Enabled = _bsOn.IsChecked == true;
             b.Secondary.BarTypeName = TypeOf(_bsType);
             b.Secondary.SpacingMm = ReadNum(_bsSp, "separacion inferior secundaria", 1, errors);
             b.Secondary.HookTypeName = HookOf(_bsHook);
+            b.Secondary.HookLengthMm = ReadNum(_bsHl, "longitud de gancho inferior secundaria", 0, errors);
 
             MeshCfg t = c.Top;
             t.Enabled = _tOn.IsChecked == true;
             t.Main.BarTypeName = TypeOf(_tmType);
             t.Main.SpacingMm = ReadNum(_tmSp, "separacion superior principal", 1, errors);
             t.Main.HookTypeName = HookOf(_tmHook);
+            t.Main.HookLengthMm = ReadNum(_tmHl, "longitud de gancho superior principal", 0, errors);
             t.Secondary.Enabled = _tsOn.IsChecked == true;
             t.Secondary.BarTypeName = TypeOf(_tsType);
             t.Secondary.SpacingMm = ReadNum(_tsSp, "separacion superior secundaria", 1, errors);
             t.Secondary.HookTypeName = HookOf(_tsHook);
+            t.Secondary.HookLengthMm = ReadNum(_tsHl, "longitud de gancho superior secundaria", 0, errors);
 
             c.CoverBottomMm = ReadNum(_coverB, "recubrimiento inferior", 0, errors);
             c.CoverTopMm = ReadNum(_coverT, "recubrimiento superior", 0, errors);
@@ -656,6 +679,10 @@ namespace FootingRebar
             foreach (FrameworkElement fe in new FrameworkElement[] { _tmType, _tmSp, _tmHook, _tsOn }) fe.IsEnabled = top;
             bool ts = top && scratch.Top.Secondary.Enabled;
             foreach (FrameworkElement fe in new FrameworkElement[] { _tsType, _tsSp, _tsHook }) fe.IsEnabled = ts;
+            _bmHl.IsEnabled = scratch.Bottom.Main.HookTypeName != "";
+            _bsHl.IsEnabled = bs && scratch.Bottom.Secondary.HookTypeName != "";
+            _tmHl.IsEnabled = top && scratch.Top.Main.HookTypeName != "";
+            _tsHl.IsEnabled = ts && scratch.Top.Secondary.HookTypeName != "";
 
             PlanDiameters d = Diameters(scratch, out bool allChosen);
 

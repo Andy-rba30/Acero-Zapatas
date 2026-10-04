@@ -12,13 +12,15 @@
     "main": {
       "barTypeName": "",
       "spacingMm": 200,
-      "hookTypeName": ""
+      "hookTypeName": "",
+      "hookLengthMm": 0
     },
     "secondary": {
       "enabled": true,
       "barTypeName": "",
       "spacingMm": 200,
-      "hookTypeName": ""
+      "hookTypeName": "",
+      "hookLengthMm": 0
     }
   },
 
@@ -27,13 +29,15 @@
     "main": {
       "barTypeName": "",
       "spacingMm": 200,
-      "hookTypeName": ""
+      "hookTypeName": "",
+      "hookLengthMm": 0
     },
     "secondary": {
       "enabled": true,
       "barTypeName": "",
       "spacingMm": 200,
-      "hookTypeName": ""
+      "hookTypeName": "",
+      "hookLengthMm": 0
     }
   },
 

@@ -165,6 +165,14 @@ namespace FootingRebar.Tests
             Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75, "sin retranqueo el tramo recto empieza al recubrimiento");
             // el gancho no cambia el numero de barras ni los conjuntos
             Check(p.CountOf(BarLayer.BottomMain) == 11 && p.Groups.Count == 2, "mismo numero de barras y conjuntos con gancho");
+            // longitud de gancho elegida: llega al plan (esquema de la seccion) solo en las capas con gancho y no mueve las barras
+            c.Bottom.Main.HookLengthMm = 250;
+            c.Bottom.Secondary.HookTypeName = "";
+            c.Bottom.Secondary.HookLengthMm = 300;
+            p = FootingPlan.Build(Rect(3000, 2000), null, Mm(600), c, Diam());
+            Near(p.HookLength[BarLayer.BottomMain], 250, "longitud de gancho de la inferior principal");
+            Check(p.HookLength[BarLayer.BottomSecondary] == 0, "sin gancho elegido no hay longitud de gancho");
+            Near(p.Bars.First(x => x.Layer == BarLayer.BottomMain).Start, 75 + 50.8, "la longitud de gancho no cambia el retranqueo");
         }
 
         private static void TopMesh()
@@ -273,15 +281,18 @@ namespace FootingRebar.Tests
             c.Normalize();
             Check(c.Direction.Mode == "long" && c.Bottom.Enabled && !c.Top.Enabled, "valores por defecto");
             Check(c.CoverBottomMm == 75 && c.CoverTopMm == 50 && c.CoverEdgeMm == 75, "recubrimientos por defecto 75 / 50 / 75");
+            Check(c.Bottom.Main.HookLengthMm == 0, "longitud de gancho por defecto 0 (la del tipo de barra)");
             c.Direction.Mode = "CORTO"; c.Bottom.Main.SpacingMm = -5; c.Bottom.Enabled = false; c.Top.Main.Enabled = false;
+            c.Top.Secondary.HookLengthMm = -10;
             c.Normalize();
             Check(c.Direction.Mode == "short", "direccion normalizada");
             Check(c.Bottom.Main.SpacingMm == 200 && c.Bottom.Enabled && c.Top.Main.Enabled, "separacion y capas obligatorias normalizadas");
+            Check(c.Top.Secondary.HookLengthMm == 0, "longitud de gancho negativa normalizada a 0");
             Check(AppConfig.NormalizeDirection("xx") == "long", "direccion desconocida -> long");
             string tmp = System.IO.Path.GetTempFileName();
             c.Save(tmp);
             string json = System.IO.File.ReadAllText(tmp);
-            Check(json.Contains("\"bottom\"") && json.Contains("\"spacingMm\"") && json.Contains("\"hookTypeName\""), "json en camelCase");
+            Check(json.Contains("\"bottom\"") && json.Contains("\"spacingMm\"") && json.Contains("\"hookTypeName\"") && json.Contains("\"hookLengthMm\""), "json en camelCase");
             AppConfig back = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             Check(back != null && back.Direction.Mode == "short" && back.CoverBottomMm == 75, "ida y vuelta por json");
             AppConfig clone = c.Clone();
