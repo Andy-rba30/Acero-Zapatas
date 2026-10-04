@@ -184,8 +184,10 @@ namespace FootingRebar
                     ToolTip = Layers.Name(b.Layer) + " Ø" + Dia(b.D) + " mm a " + Mm(b.Z) + " mm desde abajo (la mas cercana al corte, u=" + Mm(b.Coord) + ")" +
                               (b.HookStart || b.HookEnd ? ", con gancho" : "")
                 });
-                // ganchos: hacia arriba en la inferior, hacia abajo en la superior; pata esquematica de 12 diametros
-                double leg = 12 * b.D, dir = Layers.IsTop(b.Layer) ? -1 : 1;
+                // ganchos: hacia arriba en la inferior, hacia abajo en la superior; pata de la longitud de gancho
+                // elegida o, si se deja la del tipo de barra, esquematica de 12 diametros
+                double len = _plan.HookLength.TryGetValue(b.Layer, out double hl) ? hl : 0;
+                double leg = len > 0 ? len : 12 * b.D, dir = Layers.IsTop(b.Layer) ? -1 : 1;
                 if (b.HookStart) HookLeg(X(b.Start), Y(b.Z), -1, dir, leg * k, b.D * k, brush, th);
                 if (b.HookEnd) HookLeg(X(b.End), Y(b.Z), 1, dir, leg * k, b.D * k, brush, th);
                 Text(Layers.Name(b.Layer) + " Ø" + Dia(b.D), X(o.VMin) + 4, Y(b.Z) + (Layers.IsTop(b.Layer) ? 2 : -14), brush, 9);

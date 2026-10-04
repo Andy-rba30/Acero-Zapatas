@@ -35,6 +35,12 @@ namespace FootingRebar
         /// Vacio = barra recta. En los bordes de un hueco nunca hay gancho.
         /// </summary>
         public string HookTypeName { get; set; } = "";
+        /// <summary>
+        /// Longitud de los ganchos de la capa (mm), tal como la mide Revit (longitud de gancho inicial/final):
+        /// se fija en cada barra con "Sobrescribir longitudes de gancho", sin tocar el tipo de barra.
+        /// 0 = la que da el tipo de barra para ese gancho.
+        /// </summary>
+        public double HookLengthMm { get; set; } = 0;
     }
 
     /// <summary>Una parrilla: capa principal (a lo largo de u) y capa secundaria (a lo largo de v).</summary>
@@ -103,6 +109,7 @@ namespace FootingRebar
             {
                 if (l.BarTypeName == null) l.BarTypeName = "";
                 if (l.HookTypeName == null) l.HookTypeName = "";
+                if (l.HookLengthMm < 0) l.HookLengthMm = 0;
                 if (l.SpacingMm <= 0) l.SpacingMm = 200;
             }
             Bottom.Enabled = true;

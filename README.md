@@ -77,7 +77,10 @@ así la barra guarda el recubrimiento con los bordes paralelos a ella.
   Estándar** del proyecto (los de *Estribo/Tirante* no: Revit no los admite en estas barras) y,
   si al proyecto le falta el de 90° o el de 180°, el catálogo del plugin los ofrece igualmente
   (`Estandar - 90`, prolongación 12 diámetros; `Estandar - 180`, 4 diámetros): el tipo se crea
-  en el proyecto al armar y se avisa en el resumen.
+  en el proyecto al armar y se avisa en el resumen. La **longitud de gancho** de cada capa se puede
+  fijar en la ventana (mm, como la mide Revit): se aplica a cada barra con *Sobrescribir longitudes
+  de gancho*, sin tocar el tipo de barra; con 0 se usa la del tipo de barra. Si no cabe en el canto,
+  la comprobación de la geometría real rechaza la zapata.
 - Los tramos más cortos que `minBarLengthMm` (300 mm) se omiten y se cuentan en el aviso.
 
 ## Comprobaciones de seguridad
@@ -101,8 +104,10 @@ qué se ha rechazado lo que no.
   columnas encima y el resumen del armado (o, en rojo, el motivo del rechazo). Cada fila
   armable tiene su **dirección** propia. Clic en una fila para verla en los esquemas.
 - **Dirección de las barras principales**: lado largo (por defecto), lado corto, X, Y o ángulo.
-- **Parrilla inferior**: principal y secundaria (tipo de barra, separación, gancho).
+- **Parrilla inferior**: principal y secundaria (tipo de barra, separación, gancho y longitud de
+  gancho).
 - **Parrilla superior**: activar, principal y secundaria.
+- La columna de entradas tiene barras de desplazamiento vertical y horizontal cuando no cabe.
 - **Recubrimientos, columnas y partición**: recubrimiento inferior (contra el terreno, 75 mm
   por defecto), superior (50) y lateral (75); mostrar las columnas; plantilla del parámetro
   Partición (`{categoria}`, `{prefijo}`, `{marca}`, `{id}`, `{codigo}` o `{capa}`, `{tipo}`,
@@ -146,13 +151,13 @@ botón Armar avisa de qué falta.
   "coverBottomMm": 75, "coverTopMm": 50, "coverEdgeMm": 75,
   "direction": { "mode": "long", "angleDeg": 0 },   // long | short | x | y | angle
   "bottom": {
-    "main":      { "barTypeName": "", "spacingMm": 200, "hookTypeName": "" },
-    "secondary": { "enabled": true, "barTypeName": "", "spacingMm": 200, "hookTypeName": "" }
+    "main":      { "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 },
+    "secondary": { "enabled": true, "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 }
   },
   "top": {
     "enabled": false,
-    "main":      { "barTypeName": "", "spacingMm": 200, "hookTypeName": "" },
-    "secondary": { "enabled": true, "barTypeName": "", "spacingMm": 200, "hookTypeName": "" }
+    "main":      { "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 },
+    "secondary": { "enabled": true, "barTypeName": "", "spacingMm": 200, "hookTypeName": "", "hookLengthMm": 0 }
   },
   "detectColumns": true,
   "partitionTemplate": "{categoria} - {prefijo}-{marca}",   // contrato ARBA: "CIMIENTOS - ZAP-Z1"
